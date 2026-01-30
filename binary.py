@@ -478,11 +478,11 @@ if st.session_state['iq_api'] and st.session_state.get('trading_attivo', True):
         # grazie alla logica della barra di progresso che hai già nella sidebar.
         
 elif not st.session_state['iq_api']:
-    st.info("👋 Benvenuto! Effettua il login dalla barra laterale per attivare Sentinel AI.")
+    st.info("👋 **Sentinel AI Binary Bot**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m)")
 else:
     st.warning("⚠️ Il sistema è attualmente in pausa (Kill-switch attivo).")
 
-st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m).")
+#st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m).")
 st.caption(f"Ultimo aggiornamento globale: {get_now_rome().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- NUOVO BLOCCO GRAFICO (SOLO DATI IQ OPTION) ---
