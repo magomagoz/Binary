@@ -297,6 +297,11 @@ if st.session_state['iq_api']:
             adx_df = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
             df_rt['adx'] = adx_df['ADX_14']
 
+                # --- AGGIUNTA GRIGLIA VERTICALE (OGNI 10 MINUTI) ---
+            for t in p_df.index:
+                if t.minute % 10 == 0:
+                    fig.add_vline(x=t, line_width=0.5, line_dash="solid", line_color="rgba(0, 0, 0, 0.3)", layer="below")
+
             # Plotly
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
             fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
