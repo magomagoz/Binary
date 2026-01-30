@@ -48,11 +48,23 @@ email = st.sidebar.text_input("Email")
 password = st.sidebar.text_input("Password", type="password")
 
 if st.sidebar.button("Connetti Practice"):
-    st.session_state['iq_api'] = IQ_Option(email, password)
-    st.session_state['iq_api'].change_balance("PRACTICE")
-    check, reason = st.session_state['iq_api'].connect()
-    if check: st.sidebar.success("Connesso!")
-    else: st.sidebar.error(reason)
+    with st.spinner("Accesso in corso..."):
+        api = IQ_Option(email, password)
+        check, reason = api.connect()
+        
+        if check:
+            # Attendiamo un secondo per permettere al profilo di caricarsi completamente
+            time_lib.sleep(2) 
+            
+            try:
+                api.change_balance("PRACTICE")
+                st.session_state['iq_api'] = api
+                st.sidebar.success("✅ Connesso a PRACTICE!")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error("Errore nel caricamento del saldo. Riprova tra pochi secondi.")
+        else:
+            st.sidebar.error(f"❌ Credenziali errate o 2FA attiva: {reason}")
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
