@@ -142,7 +142,7 @@ stake = st.sidebar.number_input("Investimento singolo ($)", value=10.0)
 # Banner logic
 banner_path = "banner1.png"
 st.image(banner_path, use_container_width=True)
-st.header(f"🛰️ **Sentinel AI - Binary Bot** 🛰️", layout="wide")
+st.header("🛰️ Sentinel AI - Binary Bot 🛰️")
 
 # Controllo limiti di gestione capitale
 if st.session_state['daily_pnl'] >= target_profit:
