@@ -163,13 +163,13 @@ else:
 
             status.update(label="Scansione completata. In attesa del prossimo ciclo.", state="complete")
 
-                # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
-                st.write("⏳ Prossimo check tra:")
-                progress_bar = st.progress(0)
-                for percent_complete in range(100):
-                    time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
-                    progress_bar.progress(percent_complete + 1)
-                st.rerun()
+            # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
+            st.write("⏳ Prossimo check tra:")
+            progress_bar = st.progress(0)
+            for percent_complete in range(100):
+            time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+            progress_bar.progress(percent_complete + 1)
+            st.rerun()
 
 # Visualizzazione Cronologia
 if st.session_state['trades']:
