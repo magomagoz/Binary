@@ -14,7 +14,6 @@ if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
 
-
 # --- FUNZIONE DI CONNESSIONE ---
 def connect_to_iq(email, password):
     # Rimuovi i log eccessivi per pulizia
@@ -132,13 +131,13 @@ else:
         st.session_state['iq_api'] = None
         st.rerun()
 
-# --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
-st.write("⏳ Prossimo check tra:")
-progress_bar = st.progress(0)
-for percent_complete in range(100):
-    time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
-    progress_bar.progress(percent_complete + 1)
-st.rerun()
+    # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
+    st.write("⏳ Prossimo check tra:")
+    progress_bar = st.progress(0)
+    for percent_complete in range(100):
+        time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+        progress_bar.progress(percent_complete + 1)
+    st.rerun()
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
