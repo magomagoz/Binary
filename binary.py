@@ -6,6 +6,7 @@ import time as time_lib
 from datetime import datetime
 import pytz
 import logging
+import os
 
 # --- CONFIGURAZIONE PAGINA E BANNER ---
 st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
