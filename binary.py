@@ -95,13 +95,6 @@ def check_binary_signal(df):
             return "PUT"
     return None
 
-# --- CONFIGURAZIONE PAGINA E BANNER ---
-st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
-
-# Banner logic
-banner_path = "banner1.png"
-st.image(banner_path, use_container_width=True)
-
 # --- CONFIGURAZIONE ---
 logging.disable(logging.CRITICAL)
 
@@ -144,6 +137,12 @@ st.sidebar.subheader("💰 Money Management")
 target_profit = st.sidebar.number_input("Target Profit Giornaliero ($)", value=50.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss Giornaliero ($)", value=30.0)
 stake = st.sidebar.number_input("Investimento singolo ($)", value=10.0)
+
+# --- CONFIGURAZIONE PAGINA E BANNER ---
+# Banner logic
+banner_path = "banner1.png"
+st.image(banner_path, use_container_width=True)
+st.header(f"🛰️ **Sentinel AI - Binary Bot** 🛰️", layout="wide")
 
 # Controllo limiti di gestione capitale
 if st.session_state['daily_pnl'] >= target_profit:
