@@ -167,8 +167,8 @@ else:
             st.write("⏳ Prossimo check tra:")
             progress_bar = st.progress(0)
             for percent_complete in range(100):
-            time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
-            progress_bar.progress(percent_complete + 1)
+                time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+                progress_bar.progress(percent_complete + 1)
             st.rerun()
 
 # Visualizzazione Cronologia
