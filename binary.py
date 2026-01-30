@@ -32,6 +32,7 @@ if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] 
 if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
+if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
 
 # --- MAPPA ASSET ---
 asset_map = {
@@ -380,8 +381,16 @@ if st.session_state['iq_api']:
             cols[i].markdown(f"<div style='text-align:center; background:{bg}; padding:10px; border-radius:5px;'><b>{curr}</b><br>{val:.2f}%</div>", unsafe_allow_html=True)
 
 # --- REPORTING ---
-st.markdown("---")
-st.subheader(f"📊 Risultato Sessione: € {st.session_state['daily_pnl']:.2f}")
+#st.markdown("---")
+#st.subheader(f"📊 Risultato Sessione: € {st.session_state['daily_pnl']:.2f}")
+st.divider()
+col_res1, col_res2 = st.columns(2)
+with col_res1:
+    st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
+with col_res2:
+    sim_pnl = st.session_state.get('sim_pnl', 0.0)
+    st.subheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
+
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
 
