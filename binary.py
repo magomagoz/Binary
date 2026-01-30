@@ -392,7 +392,7 @@ st.image(banner_path, use_container_width=True)
 # --- LOGICA DI AUTORUN (Senza tasto Avvia) ---
 
 # Verifichiamo se l'utente è loggato e se il trading non è stato sospeso manualmente
-if st.session_state['iq_api'] and st.session_state.get('trading_attivo', True):
+if st.session_state['iq_api'] is not None and st.session_state['trading_attivo']:
     
     # Controllo limiti di gestione capitale (Stop Loss / Take Profit)
     if st.session_state['daily_pnl'] >= target_profit:
