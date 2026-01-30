@@ -220,7 +220,7 @@ else:
 
 # --- GRAFICO IN TEMPO REALE ---
 st.divider()
-st.subheader(f"📈 Grafico {selected_label} (1m)")
+st.subheader(f"📈 Grafico con BB e RSI (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
 
