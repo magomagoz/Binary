@@ -57,9 +57,9 @@ def send_telegram_msg(message):
 def get_session_status():
     h = datetime.now(pytz.utc).hour
     return {
-        "Tokyo": 0 <= h < 9,
-        "Londra": 8 <= h < 17,
-        "New York": 13 <= h < 22
+        "Tokyo 🇯🇵": 0 <= h < 9,
+        "Londra 🇬🇧": 8 <= h < 17,
+        "New York 🇺🇸": 13 <= h < 22
     }
 
 # --- FUNZIONI TECNICHE IQ OPTION ---
@@ -234,10 +234,10 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     check, id = API.buy(stake, asset, signal.lower(), 1)
                     
                     if check:
-                        st.info(f"✅ Ordine inviato. ID: {id}")
+                        st.info(f"✅ Ordine inviato su {asset}. Attesa scadenza...")
                         time_lib.sleep(62)
                         res = API.check_win_v2(id)
-                        
+                                                
                         # Salvataggio con tutti i dati per l'analisi post-sessione
                         st.session_state['trades'].append({
                             "Ora": get_now_rome().strftime("%H:%M:%S"),
@@ -272,12 +272,16 @@ df_rt = pd.DataFrame()
 
 if st.session_state['iq_api']:
     try:
-        candles_data = st.session_state['iq_api'].get_candles(pair, 60, 100, time_lib.time())
+        candles_data = st.session_state['iq_api'].get_candles(pair, 60, 200, time_lib.time())
         df_rt = pd.DataFrame(candles_data)
         if not df_rt.empty:
             df_rt.rename(columns={'max': 'high', 'min': 'low', 'open': 'open', 'close': 'close', 'from': 'time'}, inplace=True)
             df_rt['time'] = pd.to_datetime(df_rt['time'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Europe/Rome')
             df_rt.set_index('time', inplace=True)
+            
+            # Assicurati di calcolare l'ADX anche qui per le metriche visive
+            adx_vis = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
+            df_rt['adx'] = adx_vis['ADX_14']
             
             # --- CALCOLO INDICATORI PER IL GRAFICO ---
             # Bollinger
@@ -305,7 +309,7 @@ if st.session_state['iq_api']:
             st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
-st.divider(---)
+st.divider("---")
 
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
 if not df_rt.empty:
@@ -340,7 +344,7 @@ else:
     st.info("In attesa di dati in tempo reale per le metriche...")
 
 # --- CURRENCY STRENGTH ---
-st.divider()
+st.divider("---")
 st.subheader("⚡ Currency Strength (IQ Option Data)")
 if st.session_state['iq_api']:
     s_data = get_iq_currency_strength(st.session_state['iq_api'])
