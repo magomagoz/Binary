@@ -190,6 +190,11 @@ else:
         st.rerun()
 
 st.sidebar.divider()
+st.sidebar.subheader("🧪 Modalità Test")
+paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
+
+
+st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni")
 for s_name, is_open in get_session_status().items():
     color = "🟢" if is_open else "🔴"
@@ -226,34 +231,49 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 signal, stats = check_binary_signal(df)
                 
                 if signal:
-                    # SOUND ALERT
-                    st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
                     st.warning(f"🔥 SEGNALE {signal} SU {asset}!")
                     
-                    # Ora 'signal' è una stringa pulita ("CALL" o "PUT")
-                    check, id = API.buy(stake, asset, signal.lower(), 1)
-                    
-                    if check:
-                        st.info(f"✅ Ordine inviato su {asset}. Attesa scadenza...")
-                        time_lib.sleep(62)
-                        res = API.check_win_v2(id)
-                                                
-                        # Salvataggio con tutti i dati per l'analisi post-sessione
-                        st.session_state['trades'].append({
-                            "Ora": get_now_rome().strftime("%H:%M:%S"),
-                            "Asset": asset,
-                            "Tipo": signal,
-                            "Esito": "WIN" if res > 0 else "LOSS",
-                            "Profitto": res,
-                            "RSI": stats.get("RSI", 0),
-                            "ADX": stats.get("ADX", 0),
-                            "Stoch": stats.get("Stoch_K", 0),
-                            "ATR": stats.get("ATR", 0),
-                            "EMA_Dist": round(stats.get("Price", 0) - stats.get("EMA200", 0), 5),
-                            "Trend": stats.get("Trend", "N/A")
-                        })
-                        st.session_state['daily_pnl'] += res
-                        st.rerun()
+                    if paper_trading:
+                        # --- LOGICA SIMULAZIONE ---
+                        st.info(f"🧪 [SIMULAZIONE] Analisi esito per {asset}...")
+                        time_lib.sleep(60) 
+                        
+                        df_post = get_data_from_iq(API, asset)
+                        if not df_post.empty:
+                            price_end = df_post['close'].iloc[-1]
+                            price_start = stats["Price"]
+                            sim_win = price_end > price_start if signal == "CALL" else price_end < price_start
+                            
+                            res = (stake * 0.85) if sim_win else -stake 
+                            
+                            st.session_state['trades'].append({
+                                "Ora": get_now_rome().strftime("%H:%M:%S"),
+                                "Asset": asset,
+                                "Tipo": f"SIM-{signal}",
+                                "Esito": "WIN" if sim_win else "LOSS",
+                                "Profitto": res,
+                                "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
+                                "ATR": stats["ATR"], "Trend": stats["Trend"]
+                            })
+                            # Usiamo una variabile di stato dedicata per il profitto simulato
+                            if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
+                            st.session_state['sim_pnl'] += res
+                            st.rerun()
+                    else:
+                        # --- LOGICA REALE ---
+                        check, id = API.buy(stake, asset, signal.lower(), 1)
+                        if check:
+                            time_lib.sleep(62)
+                            res = API.check_win_v2(id)
+                            st.session_state['trades'].append({
+                                "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": signal,
+                                "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res, 
+                                "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
+                                "ATR": stats["ATR"], "Trend": stats["Trend"]
+                            })
+                            st.session_state['daily_pnl'] += res
+                            st.rerun()
+                            
             status.update(label="✅ Scansione completata. In attesa...", state="complete")
 else:
     if not st.session_state['iq_api']:
@@ -262,7 +282,7 @@ else:
         st.warning("⚠️ Bot in pausa.")
 
 # --- GRAFICO IN TEMPO REALE ---
-st.divider()
+st.markdown("---")
 st.subheader(f"📈 Grafico con Indicatori Sentinel (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
@@ -314,8 +334,8 @@ if st.session_state['iq_api']:
             st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
-st.divider()
 
+st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
 if not df_rt.empty:
     st.markdown("### 🔍 Sentinel Real-Time Oscillators")
@@ -349,7 +369,7 @@ else:
     st.info("In attesa di dati in tempo reale per le metriche...")
 
 # --- CURRENCY STRENGTH ---
-st.divider("---")
+st.markdown("---")
 st.subheader("⚡ Currency Strength (IQ Option Data)")
 if st.session_state['iq_api']:
     s_data = get_iq_currency_strength(st.session_state['iq_api'])
@@ -360,7 +380,7 @@ if st.session_state['iq_api']:
             cols[i].markdown(f"<div style='text-align:center; background:{bg}; padding:10px; border-radius:5px;'><b>{curr}</b><br>{val:.2f}%</div>", unsafe_allow_html=True)
 
 # --- REPORTING ---
-st.divider()
+st.markdown("---")
 st.subheader(f"📊 Risultato Sessione: € {st.session_state['daily_pnl']:.2f}")
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
@@ -430,6 +450,7 @@ if st.session_state['trades']:
         )
         st.plotly_chart(fig_atr, use_container_width=True)
 
+    st.markdown("---")
     # 3. Tabella Storico Dettagliata con formattazione
     st.write("📑 **Dettaglio Tecnico Operazioni**")
     
