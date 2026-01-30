@@ -133,7 +133,7 @@ else:
         timer_placeholder = st.empty()
         
         # Simulazione Scan (Si attiva ogni 60 secondi)
-        assets = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "]
+        assets = ["EURUSD", "GBPUSD", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURGBP", "GBPJPY", "EURJPY"]
         
         with st.status("🔍 Sentinel sta scansionando i mercati...", expanded=True) as status:
             for asset in assets:
