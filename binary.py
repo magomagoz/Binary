@@ -6,115 +6,111 @@ import time as time_lib
 from datetime import datetime
 import logging
 
-# --- CONFIGURAZIONE LOGGING & STATO ---
-logging.disable(logging.CRITICAL)
+# Inizializzazione Session State
 if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
 
-# --- LOGICA DI TRADING ---
-
-def get_data_from_iq(API, asset, count=60, period=60):
-    """Recupera candele reali da IQ invece di YFinance"""
-    candles = API.get_candles(asset, period, count, time_lib.time())
-    df = pd.DataFrame(candles)
-    df.rename(columns={'max': 'high', 'min': 'low', 'from': 'time'}, inplace=True)
-    return df
+def get_data_from_iq(API, asset):
+    try:
+        candles = API.get_candles(asset, 60, 100, time_lib.time())
+        df = pd.DataFrame(candles)
+        if df.empty: return pd.DataFrame()
+        df.rename(columns={'max': 'high', 'min': 'low', 'from': 'time'}, inplace=True)
+        return df
+    except: return pd.DataFrame()
 
 def check_binary_signal(df):
-    """Strategia Mean Reversion ottimizzata per 60s"""
-    if df.empty: return None
+    if df.empty or len(df) < 20: return None
     
-    # Calcolo indicatori su dati reali IQ
+    # Calcolo pulito con nomi colonne standardizzati
     bb = ta.bbands(df['close'], length=20, std=2.2)
+    if bb is None or bb.empty: return None
+    
+    # Risoluzione dinamica nomi colonne per evitare KeyError
+    bbl_col = [c for c in bb.columns if 'BBL' in c][0]
+    bbu_col = [c for c in bb.columns if 'BBU' in c][0]
+    
     rsi = ta.rsi(df['close'], length=7)
     adx = ta.adx(df['high'], df['low'], df['close'], length=14)
     
     curr = df.iloc[-1]
     curr_rsi = rsi.iloc[-1]
-    curr_adx = adx['ADX_14'].iloc[-1]
+    curr_adx = adx.iloc[-1, 0] # ADX_14
     
-    # FILTRO VOLATILITÀ: Evitiamo mercati piatti (ADX < 15) o trend esplosivi (ADX > 35)
     if 15 < curr_adx < 35:
-        if curr['close'] <= bb['BBL_20_2.2'].iloc[-1] and curr_rsi < 25:
+        if curr['close'] <= bb[bbl_col].iloc[-1] and curr_rsi < 25:
             return "CALL"
-        elif curr['close'] >= bb['BBU_20_2.2'].iloc[-1] and curr_rsi > 75:
+        elif curr['close'] >= bb[bbu_col].iloc[-1] and curr_rsi > 75:
             return "PUT"
     return None
 
-# --- UI SIDEBAR ---
-st.sidebar.title("🔐 Accesso IQ Option")
-email = st.sidebar.text_input("Email")
-password = st.sidebar.text_input("Password", type="password")
-
-if st.sidebar.button("Connetti Practice"):
-    with st.spinner("Accesso in corso..."):
+# --- SIDEBAR (Stato Connessione) ---
+st.sidebar.title("🔐 Controllo Accesso")
+if st.session_state['iq_api'] is None:
+    st.sidebar.warning("⚠️ Stato: DISCONNESSO")
+    email = st.sidebar.text_input("Email")
+    password = st.sidebar.text_input("Password", type="password")
+    
+    if st.sidebar.button("Connetti Practice"):
         api = IQ_Option(email, password)
         check, reason = api.connect()
-        
         if check:
-            # Attendiamo un secondo per permettere al profilo di caricarsi completamente
-            time_lib.sleep(2) 
-            
-            try:
-                api.change_balance("PRACTICE")
-                st.session_state['iq_api'] = api
-                st.sidebar.success("✅ Connesso a PRACTICE!")
-                st.rerun()
-            except Exception as e:
-                st.sidebar.error("Errore nel caricamento del saldo. Riprova tra pochi secondi.")
+            time_lib.sleep(2) # Buffer critico per caricamento profilo
+            api.change_balance("PRACTICE")
+            st.session_state['iq_api'] = api
+            st.rerun()
         else:
-            st.sidebar.error(f"❌ Credenziali errate o 2FA attiva: {reason}")
+            st.sidebar.error(f"Errore: {reason}")
+else:
+    st.sidebar.success("✅ Stato: CONNESSO (PRACTICE)")
+    if st.sidebar.button("Esci / Reset"):
+        st.session_state['iq_api'] = None
+        st.rerun()
 
+# --- MONEY MANAGEMENT ---
 st.sidebar.divider()
-st.sidebar.subheader("💰 Money Management")
-target_profit = st.sidebar.number_input("Target Profit Giornaliero ($)", value=50.0)
-stop_loss_limit = st.sidebar.number_input("Stop Loss Giornaliero ($)", value=30.0)
-stake = st.sidebar.number_input("Investimento singolo ($)", value=10.0)
+st.sidebar.subheader("💰 Gestione")
+target_p = st.sidebar.number_input("Target Profit ($)", value=50.0)
+stop_l = st.sidebar.number_input("Stop Loss ($)", value=30.0)
+stake = st.sidebar.number_input("Stake ($)", value=10.0)
 
-# --- BODY PRINCIPALE ---
+# --- AREA OPERATIVA ---
 st.title("🤖 Sentinel Binary Bot v2")
 
-# Controllo limiti di gestione capitale
-if st.session_state['daily_pnl'] >= target_profit:
-    st.balloons()
-    st.success("🎯 Target raggiunto! Bot in pausa per oggi.")
-elif st.session_state['daily_pnl'] <= -stop_loss_limit:
-    st.error("🛑 Stop Loss raggiunto. Bot fermato per sicurezza.")
+if st.session_state['iq_api'] is None:
+    st.info("👋 Benvenuto. Per iniziare, inserisci le credenziali IQ Option nella sidebar.")
 else:
-    if st.button("🚀 AVVIA SCANSIONE CICLICA (1m)"):
-        API = st.session_state['iq_api']
-        if API:
-            assets = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"] # Lista asset da monitorare
-            
-            with st.spinner("Scansione attiva..."):
-                for asset in assets:
-                    st.write(f"Analizzando {asset}...")
-                    df = get_data_from_iq(API, asset)
-                    signal = check_binary_signal(df)
-                    
-                    if signal:
-                        st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
-                        # ESECUZIONE REALE
-                        check, id = API.buy(stake, asset, signal.lower(), 1)
-                        if check:
-                            st.info(f"✅ Trade aperto! ID: {id}")
-                            # Aspettiamo il risultato (60s + piccolo buffer)
-                            time_lib.sleep(62)
-                            result = API.check_win_v2(id)
-                            st.session_state['daily_pnl'] += result
-                            st.session_state['trades'].append({
-                                "Ora": datetime.now().strftime("%H:%M"),
-                                "Asset": asset,
-                                "Tipo": signal,
-                                "Esito": "WIN" if result > 0 else "LOSS",
-                                "Profitto": result
-                            })
-        else:
-            st.warning("Connetti l'API prima di iniziare.")
+    # Mostra indicatori di sistema online
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Sistema", "ONLINE", delta="Pronto")
+    col2.metric("Saldo Sessione", f"${st.session_state['daily_pnl']:.2f}")
+    col3.metric("Trade Eseguiti", len(st.session_state['trades']))
 
-# --- REPORTING ---
-st.divider()
-st.subheader(f"Risultato Sessione: ${st.session_state['daily_pnl']:.2f}")
+    if st.button("🚀 AVVIA SCANSIONE"):
+        if st.session_state['daily_pnl'] >= target_p or st.session_state['daily_pnl'] <= -stop_l:
+            st.warning("Limiti giornalieri raggiunti. Operatività bloccata.")
+        else:
+            assets = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY"]
+            for asset in assets:
+                with st.status(f"Analizzando {asset}...", expanded=False):
+                    df = get_data_from_iq(st.session_state['iq_api'], asset)
+                    signal = check_binary_signal(df)
+                    if signal:
+                        st.write(f"Segnale {signal} rilevato! Invio ordine...")
+                        check, id = st.session_state['iq_api'].buy(stake, asset, signal.lower(), 1)
+                        if check:
+                            st.write("Ordine inviato. Attendendo scadenza (62s)...")
+                            time_lib.sleep(62)
+                            res = st.session_state['iq_api'].check_win_v2(id)
+                            st.session_state['daily_pnl'] += res
+                            st.session_state['trades'].append({
+                                "Asset": asset, "Tipo": signal, "Esito": "WIN" if res > 0 else "LOSS"
+                            })
+                            st.rerun()
+                    else:
+                        st.write("Nessuna opportunità valida.")
+
+# Tabella riassuntiva
 if st.session_state['trades']:
-    st.table(pd.DataFrame(st.session_state['trades']))
+    st.table(st.session_state['trades'])
