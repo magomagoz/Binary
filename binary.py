@@ -221,32 +221,38 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
             for asset in assets_to_scan:
                 st.write(f"Verifica {asset}...")
                 df = get_data_from_iq(API, asset)
-                signal = check_binary_signal(df)
+                
+                # CORREZIONE QUI: spacchettiamo i due valori restituiti
+                signal, stats = check_binary_signal(df)
                 
                 if signal:
                     # SOUND ALERT
                     st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
                     st.warning(f"🔥 SEGNALE {signal} SU {asset}!")
                     
+                    # Ora 'signal' è una stringa pulita ("CALL" o "PUT")
                     check, id = API.buy(stake, asset, signal.lower(), 1)
+                    
                     if check:
                         st.info(f"✅ Ordine inviato. ID: {id}")
                         time_lib.sleep(62)
                         res = API.check_win_v2(id)
-                        st.session_state['daily_pnl'] += res
+                        
+                        # Salvataggio con tutti i dati per l'analisi post-sessione
                         st.session_state['trades'].append({
-                        "Ora": get_now_rome().strftime("%H:%M:%S"),
-                        "Asset": asset,
-                        "Tipo": signal,
-                        "Esito": "WIN" if res > 0 else "LOSS",
-                        "Profitto": res,
-                        "RSI": stats["RSI"],
-                        "ADX": stats["ADX"],
-                        "Stoch": stats["Stoch_K"],
-                        "ATR": stats["ATR"],
-                        "EMA_Dist": round(stats["Price"] - stats["EMA200"], 5),
-                        "Trend": stats["Trend"]
-                    })
+                            "Ora": get_now_rome().strftime("%H:%M:%S"),
+                            "Asset": asset,
+                            "Tipo": signal,
+                            "Esito": "WIN" if res > 0 else "LOSS",
+                            "Profitto": res,
+                            "RSI": stats.get("RSI", 0),
+                            "ADX": stats.get("ADX", 0),
+                            "Stoch": stats.get("Stoch_K", 0),
+                            "ATR": stats.get("ATR", 0),
+                            "EMA_Dist": round(stats.get("Price", 0) - stats.get("EMA200", 0), 5),
+                            "Trend": stats.get("Trend", "N/A")
+                        })
+                        st.session_state['daily_pnl'] += res
                         st.rerun()
             status.update(label="✅ Scansione completata. In attesa...", state="complete")
 else:
