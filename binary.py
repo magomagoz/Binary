@@ -5,22 +5,49 @@ from iqoptionapi.stable_api import IQ_Option
 import time as time_lib
 from datetime import datetime
 import pytz
+from iqoptionapi.stable_api import IQ_Option
 import logging
-import os
 
-# --- CONFIGURAZIONE PAGINA E BANNER ---
-st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
-
-# Banner logic
-banner_path = "banner1.png"
-st.image(banner_path, use_container_width=True)
-
-# --- CONFIGURAZIONE ---
+# --- CONFIGURAZIONE LOGGING & STATO ---
 logging.disable(logging.CRITICAL)
-
 if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
+
+
+# --- FUNZIONE DI CONNESSIONE ---
+def connect_to_iq(email, password):
+    # Rimuovi i log eccessivi per pulizia
+    logging.disable(logging.CRITICAL)
+    
+    API = IQ_Option(email, password)
+    API.change_balance("PRACTICE") # Forza l'uso del conto DEMO
+    
+    check, reason = API.connect()
+    if check:
+        st.sidebar.success("✅ Connesso a IQ Option (PRACTICE)")
+        return API
+    else:
+        st.sidebar.error(f"❌ Errore: {reason}")
+        return None
+
+# --- LOGICA DI ESECUZIONE TRADE ---
+def execute_binary_trade(API, asset, direction, amount, duration=1):
+    """
+    Esegue il trade su IQ Option.
+    duration = minuti (1, 5, etc.)
+    """
+    if API:
+        # Converte la direzione per l'API
+        action = "buy" if direction == "CALL" else "sell"
+        
+        # Esegue l'ordine
+        check, id = API.buy(amount, asset, action, duration)
+        if check:
+            return True, id
+        else:
+            return False, "Errore apertura"
+    return False, "API non connessa"
 
 # --- FUNZIONE ORARI MERCATI ---
 def is_market_open():
@@ -69,8 +96,22 @@ def check_binary_signal(df):
             return "PUT"
     return None
 
+# --- CONFIGURAZIONE PAGINA E BANNER ---
+st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
+
+# Banner logic
+banner_path = "banner1.png"
+st.image(banner_path, use_container_width=True)
+
+# --- CONFIGURAZIONE ---
+logging.disable(logging.CRITICAL)
+
+if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
+if 'trades' not in st.session_state: st.session_state['trades'] = []
+if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
+
 # --- SIDEBAR ACCESS ---
-st.sidebar.title("🛂 Sentinel AI Binary")
+st.sidebar.title("🔐 Accesso IQ Option")
 if st.session_state['iq_api'] is None:
     st.sidebar.error("🔴 STATO: DISCONNESSO")
     user_mail = st.sidebar.text_input("Email IQ")
@@ -91,56 +132,67 @@ else:
         st.session_state['iq_api'] = None
         st.rerun()
 
-# --- AREA OPERATIVA ---
-st.title("🛡️ Sentinel - AI Binary Bot")
+# --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
+st.write("⏳ Prossimo check tra:")
+progress_bar = st.progress(0)
+for percent_complete in range(100):
+    time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+    progress_bar.progress(percent_complete + 1)
+st.rerun()
 
-open_status, status_msg = is_market_open()
+st.sidebar.divider()
+st.sidebar.subheader("💰 Money Management")
+target_profit = st.sidebar.number_input("Target Profit Giornaliero ($)", value=50.0)
+stop_loss_limit = st.sidebar.number_input("Stop Loss Giornaliero ($)", value=30.0)
+stake = st.sidebar.number_input("Investimento singolo ($)", value=10.0)
 
-if st.session_state['iq_api'] is None:
-    st.info("Benvenuto in Sentinel AI. Effettua il login per attivare l'analisi dei mercati.")
+# Controllo limiti di gestione capitale
+if st.session_state['daily_pnl'] >= target_profit:
+    st.balloons()
+    st.success("🎯 Target raggiunto! Bot in pausa per oggi.")
+elif st.session_state['daily_pnl'] <= -stop_loss_limit:
+    st.error("🛑 Stop Loss raggiunto. Bot fermato per sicurezza.")
 else:
-    # Metriche
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Mercato", "OPEN" if open_status else "CLOSED", status_msg)
-    c2.metric("Sessione PnL", f"${st.session_state['daily_pnl']:.2f}")
-    c3.metric("Segnali", len(st.session_state['trades']))
+    if st.button("🚀 AVVIA SCANSIONE CICLICA (1m)"):
+        API = st.session_state['iq_api']
+        if API:
+            assets = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"] # Lista asset da monitorare
+            
+            with st.spinner("Scansione attiva..."):
+                for asset in assets:
+                    st.write(f"Analizzando {asset}...")
+                    df = get_data_from_iq(API, asset)
+                    signal = check_binary_signal(df)
+                    
+                    if signal:
+                        st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
+                        # ESECUZIONE REALE
+                        check, id = API.buy(stake, asset, signal.lower(), 1)
+                        if check:
+                            st.info(f"✅ Trade aperto! ID: {id}")
+                            # Aspettiamo il risultato (60s + piccolo buffer)
+                            time_lib.sleep(62)
+                            result = API.check_win_v2(id)
+                            st.session_state['daily_pnl'] += result
+                            st.session_state['trades'].append({
+                                "Ora": datetime.now().strftime("%H:%M"),
+                                "Asset": asset,
+                                "Tipo": signal,
+                                "Esito": "WIN" if result > 0 else "LOSS",
+                                "Profitto": result
+                            })
+        else:
+            st.warning("Connetti l'API prima di iniziare.")
 
-    if not open_status:
-        st.warning(f"⚠️ Operatività sospesa: {status_msg}")
-    else:
-        if st.button("🚀 AVVIA CICLO AUTOMATICO"):
-            while True: # Ciclo infinito di scansione
-                assets = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY"]
+# --- REPORTING ---
+st.divider()
+st.subheader(f"Risultato Sessione: ${st.session_state['daily_pnl']:.2f}")
+if st.session_state['trades']:
+    st.table(pd.DataFrame(st.session_state['trades']))
                 
-                with st.status("🔍 Scansione in corso...", expanded=False) as s:
-                    for asset in assets:
-                        df_raw = st.session_state['iq_api'].get_candles(asset, 60, 100, time_lib.time())
-                        df = pd.DataFrame(df_raw).rename(columns={'max':'high','min':'low','from':'time'})
-                        signal = check_binary_signal(df)
-                        
-                        if signal:
-                            s.update(label=f"🔥 SEGNALE {signal} su {asset}!", state="running")
-                            stake = 10 # Puoi legarlo a un input
-                            check, id = st.session_state['iq_api'].buy(stake, asset, signal.lower(), 1)
-                            if check:
-                                st.write(f"✅ Ordine {signal} inviato. Attesa 60s...")
-                                time_lib.sleep(62)
-                                res = st.session_state['iq_api'].check_win_v2(id)
-                                st.session_state['daily_pnl'] += res
-                                st.session_state['trades'].append({
-                                    "Ora": datetime.now().strftime("%H:%M"),
-                                    "Asset": asset, "Tipo": signal, "Esito": "WIN" if res > 0 else "LOSS"
-                                })
-                                st.rerun()
-
-                # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
-                st.write("⏳ Prossimo check tra:")
-                progress_bar = st.progress(0)
-                for percent_complete in range(100):
-                    time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
-                    progress_bar.progress(percent_complete + 1)
-                st.rerun()
-
 if st.session_state['trades']:
     st.subheader("📜 Cronologia Sessione")
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
+
+
+
