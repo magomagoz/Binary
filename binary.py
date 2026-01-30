@@ -1,93 +1,108 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-import numpy as np
-from datetime import datetime, timedelta
-import pytz
+from iqoptionapi.stable_api import IQ_Option
 import time as time_lib
-from streamlit_autorefresh import st_autorefresh
-# Se vuoi collegarlo davvero, dovrai installare: pip install iqoptionapi
-from iqoptionapi.stable_api import IQ_Option 
+from datetime import datetime
+import logging
 
-# --- CONFIGURAZIONE ---
-st.set_page_config(page_title="IQ-Sentinel Binary Bot", layout="wide", page_icon="🤖")
-st_autorefresh(interval=60 * 1000, key="bin_refresh")
+# --- CONFIGURAZIONE LOGGING & STATO ---
+logging.disable(logging.CRITICAL)
+if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
+if 'trades' not in st.session_state: st.session_state['trades'] = []
+if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
 
-# --- LOGICA CORE BINARIA ---
+# --- LOGICA DI TRADING ---
+
+def get_data_from_iq(API, asset, count=60, period=60):
+    """Recupera candele reali da IQ invece di YFinance"""
+    candles = API.get_candles(asset, period, count, time_lib.time())
+    df = pd.DataFrame(candles)
+    df.rename(columns={'max': 'high', 'min': 'low', 'from': 'time'}, inplace=True)
+    return df
+
 def check_binary_signal(df):
-    """
-    Logica specifica per Opzioni Binarie (60% target WR).
-    Strategia: Bollinger Mean Reversion + RSI Extreme + ADX Filter
-    """
-    if len(df) < 20: return None
+    """Strategia Mean Reversion ottimizzata per 60s"""
+    if df.empty: return None
     
-    # Calcolo indicatori
-    bb = ta.bbands(df['close'], length=20, std=2.2) # Std dev leggermente più alta per segnali più puliti
-    rsi = ta.rsi(df['close'], length=7) # RSI veloce per binarie
+    # Calcolo indicatori su dati reali IQ
+    bb = ta.bbands(df['close'], length=20, std=2.2)
+    rsi = ta.rsi(df['close'], length=7)
     adx = ta.adx(df['high'], df['low'], df['close'], length=14)
     
-    curr_close = df['close'].iloc[-1]
+    curr = df.iloc[-1]
     curr_rsi = rsi.iloc[-1]
     curr_adx = adx['ADX_14'].iloc[-1]
     
-    lower_bb = bb['BBL_20_2.2'].iloc[-1]
-    upper_bb = bb['BBU_20_2.2'].iloc[-1]
-
-    # REGOLE D'INGRESSO
-    # Filtro ADX: Se ADX > 35, il mercato è in trend troppo forte. Meglio non fare Mean Reversion.
-    if curr_adx < 35:
-        # CALL (BUY) - Prezzo sotto BB bassa e RSI in ipervenduto
-        if curr_close <= lower_bb and curr_rsi < 25:
+    # FILTRO VOLATILITÀ: Evitiamo mercati piatti (ADX < 15) o trend esplosivi (ADX > 35)
+    if 15 < curr_adx < 35:
+        if curr['close'] <= bb['BBL_20_2.2'].iloc[-1] and curr_rsi < 25:
             return "CALL"
-        # PUT (SELL) - Prezzo sopra BB alta e RSI in ipercomprato
-        elif curr_close >= upper_bb and curr_rsi > 75:
+        elif curr['close'] >= bb['BBU_20_2.2'].iloc[-1] and curr_rsi > 75:
             return "PUT"
-            
     return None
 
-def update_binary_results():
-    """Simula o verifica l'esito dell'opzione binaria dopo 60s"""
-    if st.session_state['signal_history'].empty: return
-    
-    df_hist = st.session_state['signal_history']
-    for idx, row in df_hist[df_hist['Stato'] == 'In Corso'].iterrows():
-        # Calcoliamo se è passato il minuto di scadenza
-        start_time = datetime.strptime(row['DataOra'], "%H:%M:%S")
-        now_time = datetime.now(pytz.timezone('Europe/Rome'))
-        
-        # Recupero prezzo attuale per simulare chiusura
-        ticker = "EURUSD=X" # Esempio dinamico
-        data = yf.download(row['Asset']+"=X", period="1d", interval="1m", progress=False)
-        if data.empty: continue
-        
-        close_price = data['close'].iloc[-1]
-        entry_price = float(row['Prezzo'])
-        
-        # Esito Binario
-        win = False
-        if row['Direzione'] == "CALL" and close_price > entry_price: win = True
-        elif row['Direzione'] == "PUT" and close_price < entry_price: win = True
-        
-        if win:
-            df_hist.at[idx, 'Stato'] = '✅ WIN'
-            df_hist.at[idx, 'Risultato €'] = f"+{float(row['Investimento €']) * 0.85:.2f}" # Payout medio 85%
+# --- UI SIDEBAR ---
+st.sidebar.title("🔐 Accesso IQ Option")
+email = st.sidebar.text_input("Email")
+password = st.sidebar.text_input("Password", type="password")
+
+if st.sidebar.button("Connetti Practice"):
+    st.session_state['iq_api'] = IQ_Option(email, password)
+    st.session_state['iq_api'].change_balance("PRACTICE")
+    check, reason = st.session_state['iq_api'].connect()
+    if check: st.sidebar.success("Connesso!")
+    else: st.sidebar.error(reason)
+
+st.sidebar.divider()
+st.sidebar.subheader("💰 Money Management")
+target_profit = st.sidebar.number_input("Target Profit Giornaliero ($)", value=50.0)
+stop_loss_limit = st.sidebar.number_input("Stop Loss Giornaliero ($)", value=30.0)
+stake = st.sidebar.number_input("Investimento singolo ($)", value=10.0)
+
+# --- BODY PRINCIPALE ---
+st.title("🤖 Sentinel Binary Bot v2")
+
+# Controllo limiti di gestione capitale
+if st.session_state['daily_pnl'] >= target_profit:
+    st.balloons()
+    st.success("🎯 Target raggiunto! Bot in pausa per oggi.")
+elif st.session_state['daily_pnl'] <= -stop_loss_limit:
+    st.error("🛑 Stop Loss raggiunto. Bot fermato per sicurezza.")
+else:
+    if st.button("🚀 AVVIA SCANSIONE CICLICA (1m)"):
+        API = st.session_state['iq_api']
+        if API:
+            assets = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"] # Lista asset da monitorare
+            
+            with st.spinner("Scansione attiva..."):
+                for asset in assets:
+                    st.write(f"Analizzando {asset}...")
+                    df = get_data_from_iq(API, asset)
+                    signal = check_binary_signal(df)
+                    
+                    if signal:
+                        st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
+                        # ESECUZIONE REALE
+                        check, id = API.buy(stake, asset, signal.lower(), 1)
+                        if check:
+                            st.info(f"✅ Trade aperto! ID: {id}")
+                            # Aspettiamo il risultato (60s + piccolo buffer)
+                            time_lib.sleep(62)
+                            result = API.check_win_v2(id)
+                            st.session_state['daily_pnl'] += result
+                            st.session_state['trades'].append({
+                                "Ora": datetime.now().strftime("%H:%M"),
+                                "Asset": asset,
+                                "Tipo": signal,
+                                "Esito": "WIN" if result > 0 else "LOSS",
+                                "Profitto": result
+                            })
         else:
-            df_hist.at[idx, 'Stato'] = '❌ LOSS'
-            df_hist.at[idx, 'Risultato €'] = f"-{row['Investimento €']}"
+            st.warning("Connetti l'API prima di iniziare.")
 
-# --- INTERFACCIA ---
-st.title("🤖 IQ-Sentinel Binary Bot")
-st.sidebar.header("Parametri IQ Option")
-api_key = st.sidebar.text_input("API Key (Simulata)", type="password")
-payout = st.sidebar.slider("Payout %", 70, 95, 85)
-stake = st.sidebar.number_input("Investimento ($)", value=10)
-
-if st.button("Avvia Scansione Manuale"):
-    # Qui inseriresti la logica di scansione come nel tuo script originale
-    # ma usando check_binary_signal()
-    st.toast("Scansione in corso su 9 coppie Forex...")
-
-# Grafico e Tabella Segnali (come nel tuo script, ma adattati alla logica CALL/PUT)
-# ... [Inserire qui la visualizzazione della tabella aggiornata]
-
+# --- REPORTING ---
+st.divider()
+st.subheader(f"Risultato Sessione: ${st.session_state['daily_pnl']:.2f}")
+if st.session_state['trades']:
+    st.table(pd.DataFrame(st.session_state['trades']))
