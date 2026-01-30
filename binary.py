@@ -56,11 +56,18 @@ def send_telegram_msg(message):
     st.write(f"📲 Telegram Log: {message}")
 
 def get_session_status():
-    h = datetime.now(pytz.utc).hour
+    # Otteniamo l'ora attuale a Roma
+    ora_roma = datetime.now(pytz.timezone('Europe/Rome')).hour
+    
     return {
-        "Tokyo 🇯🇵": 0 <= h < 9,
-        "Londra 🇬🇧": 8 <= h < 17,
-        "New York 🇺🇸": 13 <= h < 22
+        # Tokyo apre alle 01:00 e chiude alle 07:00/08:00 ora italiana
+        "Tokyo 🇯🇵": 1 <= ora_roma < 8,
+        
+        # Londra apre alle 09:00 e chiude alle 17:30 ora italiana
+        "Londra 🇬🇧": 9 <= ora_roma < 18,
+        
+        # New York apre alle 14:30/15:30 e chiude alle 22:00 ora italiana
+        "New York 🇺🇸": 15 <= ora_roma < 22
     }
 
 # --- FUNZIONI TECNICHE IQ OPTION ---
