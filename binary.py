@@ -232,10 +232,18 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 signal, stats = check_binary_signal(df)
                 
                 if signal:
-                    st.warning(f"🔥 SEGNALE {signal} SU {asset}!")
                     
                     if paper_trading:
-                        # --- LOGICA SIMULAZIONE ---
+                        # Suono leggero (Ping) per la Simulazione
+                        st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/despot/ping.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+                        st.info(f"🧪 SEGNALE TEST: {signal} su {asset}")
+                    else:
+                        # Suono deciso (Siren/Arrow) per Trading Reale
+                        st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+                        st.warning(f"🔥 SEGNALE REALE: {signal} su {asset}!")
+
+                    if paper_trading:
+                        # --- LOGICA SIMULAZIONE (già corretta prima) ---
                         st.info(f"🧪 [SIMULAZIONE] Analisi esito per {asset}...")
                         time_lib.sleep(60) 
                         
