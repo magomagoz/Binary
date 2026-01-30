@@ -424,45 +424,63 @@ st.sidebar.markdown("---")
 # Banner logic
 banner_path = "banner1.png"
 st.image(banner_path, use_container_width=True)
-st.header("🛰️ Sentinel AI - Binary Bot 🛰️")
+#st.header("🛰️ Sentinel AI - Binary Bot 🛰️")
 
-# Controllo limiti di gestione capitale
-if st.session_state['daily_pnl'] >= target_profit:
-    st.balloons()
-    st.success("🎯 Target raggiunto! Bot in pausa per oggi.")
-elif st.session_state['daily_pnl'] <= -stop_loss_limit:
-    st.error("🛑 Stop Loss raggiunto. Bot fermato per sicurezza.")
-else:
-    if st.button("🚀 AVVIA SCANSIONE CICLICA (1m)"):
+# --- LOGICA DI AUTORUN (Senza tasto Avvia) ---
+
+# Verifichiamo se l'utente è loggato e se il trading non è stato sospeso manualmente
+if st.session_state['iq_api'] and st.session_state.get('trading_attivo', True):
+    
+    # Controllo limiti di gestione capitale (Stop Loss / Take Profit)
+    if st.session_state['daily_pnl'] >= target_profit:
+        st.balloons()
+        st.success("🎯 Target raggiunto! Bot in pausa per oggi.")
+        st.session_state['trading_attivo'] = False # Ferma il bot
+    elif st.session_state['daily_pnl'] <= -stop_loss_limit:
+        st.error("🛑 Stop Loss raggiunto. Bot fermato per sicurezza.")
+        st.session_state['trading_attivo'] = False # Ferma il bot
+    else:
+        # IL BOT PARTE AUTOMATICAMENTE QUI
         API = st.session_state['iq_api']
-        if API:
-            assets = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"] # Lista asset da monitorare
+        assets = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"] # Lista asset da monitorare
+        
+        # Container per i log di scansione in tempo reale
+        with st.status("🛰️ Sentinel in scansione attiva...", expanded=True) as status:
+            for asset in assets:
+                st.write(f"Analizzando {asset}...")
+                df = get_data_from_iq(API, asset)
+                signal = check_binary_signal(df)
+                
+                if signal:
+                    st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
+                    # ESECUZIONE REALE
+                    check, id = API.buy(stake, asset, signal.lower(), 1)
+                    if check:
+                        st.info(f"✅ Trade aperto! ID: {id}")
+                        # Aspettiamo il risultato (60s + piccolo buffer)
+                        time_lib.sleep(62)
+                        result = API.check_win_v2(id)
+                        
+                        # Aggiornamento PnL e lista trade
+                        st.session_state['daily_pnl'] += result
+                        st.session_state['trades'].append({
+                            "Ora": datetime.now().strftime("%H:%M"),
+                            "Asset": asset,
+                            "Tipo": signal,
+                            "Esito": "WIN" if result > 0 else "LOSS",
+                            "Profitto": result
+                        })
+                        st.rerun() # Ricarica per aggiornare grafici e tabelle dopo il trade
             
-            with st.spinner("Scansione attiva..."):
-                for asset in assets:
-                    st.write(f"Analizzando {asset}...")
-                    df = get_data_from_iq(API, asset)
-                    signal = check_binary_signal(df)
-                    
-                    if signal:
-                        st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
-                        # ESECUZIONE REALE
-                        check, id = API.buy(stake, asset, signal.lower(), 1)
-                        if check:
-                            st.info(f"✅ Trade aperto! ID: {id}")
-                            # Aspettiamo il risultato (60s + piccolo buffer)
-                            time_lib.sleep(62)
-                            result = API.check_win_v2(id)
-                            st.session_state['daily_pnl'] += result
-                            st.session_state['trades'].append({
-                                "Ora": datetime.now().strftime("%H:%M"),
-                                "Asset": asset,
-                                "Tipo": signal,
-                                "Esito": "WIN" if result > 0 else "LOSS",
-                                "Profitto": result
-                            })
-        else:
-            st.warning("Connetti l'API prima di iniziare.")
+            status.update(label="✅ Scansione completata. In attesa del prossimo ciclo...", state="complete")
+
+        # Gestione del Loop: Streamlit ricaricherà lo script ogni 60 secondi
+        # grazie alla logica della barra di progresso che hai già nella sidebar.
+        
+elif not st.session_state['iq_api']:
+    st.info("👋 Benvenuto! Effettua il login dalla barra laterale per attivare Sentinel AI.")
+else:
+    st.warning("⚠️ Il sistema è attualmente in pausa (Kill-switch attivo).")
 
 st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m).")
 st.caption(f"Ultimo aggiornamento globale: {get_now_rome().strftime('%Y-%m-%d %H:%M:%S')}")
