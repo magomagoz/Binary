@@ -457,41 +457,42 @@ if st.session_state['trades']:
             ),
             text=df_analysis['Asset']
         ))
-            # --- CONFIGURAZIONE GRIGLIA E ASSE X ---
-            # Mostriamo esattamente gli ultimi 60 minuti (1 ora)
-            # Calcoliamo il range temporale
-            ora_fine = df_rt.index[-1]
-            ora_inizio = ora_fine - pd.Timedelta(minutes=60)
-
-            fig.update_xaxes(
-                range=[ora_inizio, ora_fine],
-                showgrid=True,
-                gridwidth=1,
-                gridcolor='rgba(255, 255, 255, 0.05)', # Griglia di base molto tenue
-                dtick=60000, # Forza un tick ogni 60.000 ms (ovvero 1 minuto)
-                tickformat="%H:%M"
-            )
-
-            # Aggiunta manuale di linee verticali più evidenti per ogni minuto
-            for timestamp in df_rt.index:
-                if timestamp >= ora_inizio:
-                    fig.add_vline(
-                        x=timestamp, 
-                        line_width=0.5, 
-                        line_dash="solid", 
-                        line_color="rgba(173, 216, 230, 0.1)", # Colore azzurro tenue
-                        layer="below"
-                    )
-
-            fig.update_layout(
-                height=600, # Aumentato per vedere meglio i dettagli
-                template="plotly_dark",
-                xaxis_rangeslider_visible=False,
-                margin=dict(l=10, r=10, t=10, b=10),
-                showlegend=False
-            )
             
-            st.plotly_chart(fig, use_container_width=True)
+    # --- CONFIGURAZIONE GRIGLIA E ASSE X ---
+        # Mostriamo esattamente gli ultimi 60 minuti (1 ora)
+        # Calcoliamo il range temporale
+        ora_fine = df_rt.index[-1]
+        ora_inizio = ora_fine - pd.Timedelta(minutes=60)
+
+        fig.update_xaxes(
+            range=[ora_inizio, ora_fine],
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(255, 255, 255, 0.05)', # Griglia di base molto tenue
+            dtick=60000, # Forza un tick ogni 60.000 ms (ovvero 1 minuto)
+            tickformat="%H:%M"
+        )
+
+        # Aggiunta manuale di linee verticali più evidenti per ogni minuto
+        for timestamp in df_rt.index:
+            if timestamp >= ora_inizio:
+                fig.add_vline(
+                    x=timestamp, 
+                    line_width=0.5, 
+                    line_dash="solid", 
+                    line_color="rgba(173, 216, 230, 0.1)", # Colore azzurro tenue
+                    layer="below"
+                )
+
+        fig.update_layout(
+            height=600, # Aumentato per vedere meglio i dettagli
+            template="plotly_dark",
+            xaxis_rangeslider_visible=False,
+            margin=dict(l=10, r=10, t=10, b=10),
+            showlegend=False
+        )
+            
+        st.plotly_chart(fig, use_container_width=True)
 
     with col_g2:
         # Analisi ATR vs Esito (Impatto Volatilità)
