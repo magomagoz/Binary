@@ -314,7 +314,7 @@ if st.session_state['iq_api']:
             st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
-st.divider("---")
+st.divider()
 
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
 if not df_rt.empty:
