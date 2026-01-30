@@ -5,8 +5,9 @@ from iqoptionapi.stable_api import IQ_Option
 import time as time_lib
 from datetime import datetime
 import pytz
-from iqoptionapi.stable_api import IQ_Option
 import logging
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # --- CONFIGURAZIONE CREDENZIALI (NON HARDCODARE LA PASSWORD SE PUOI) ---
 # Usa st.secrets o variabili d'ambiente per sicurezza
@@ -18,9 +19,16 @@ TELE_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 
 # --- CONFIGURAZIONE LOGGING & STATO ---
 logging.disable(logging.CRITICAL)
+
+# Inizializzazione variabili di stato
 if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
+# Queste mancavano e causano crash:
+if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] = False 
+if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
+if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
+if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa"
 
 # --- FUNZIONE DI CONNESSIONE ---
 def connect_to_iq(email, password):
@@ -37,18 +45,6 @@ def connect_to_iq(email, password):
     else:
         st.sidebar.error(f"❌ Errore: {reason}")
         return None
-
-def connetti(self):
-    check, reason = self.api.connect()
-    if check:
-        # FORZA IL CONTO DEMO (PRACTICE)
-        self.api.change_balance("PRACTICE") 
-        saldo = self.api.get_balance()
-        print(f"✅ Connesso! Saldo Demo attuale: {saldo}€")
-        self.connected = True
-    else:
-        self.connected = False
-    return self.connected
 
 # --- LOGICA DI ESECUZIONE TRADE ---
 def execute_binary_trade(API, asset, direction, amount, duration=1):
@@ -103,6 +99,37 @@ def invia_report_settimanale():
     )
     
     invia_telegram(msg)
+
+def get_iq_currency_strength(API):
+    """Calcola la forza delle valute basata sulle variazioni degli ultimi 60 minuti su IQ Option"""
+    try:
+        # Coppie principali per calcolare la forza
+        pairs = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]
+        weights = {}
+        
+        for pair in pairs:
+            # Prendiamo le candele dell'ultimo ora (60 candele da 1m)
+            candles = API.get_candles(pair, 60, 60, time_lib.time())
+            if candles:
+                df = pd.DataFrame(candles)
+                # Variazione percentuale dall'inizio dell'ora a ora
+                change = ((df['close'].iloc[-1] - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
+                weights[pair] = change
+        
+        # Calcolo forza relativa per singola valuta
+        strength = {
+            "USD 🇺🇸": (-weights.get("EURUSD",0) - weights.get("GBPUSD",0) + weights.get("USDJPY",0) + weights.get("USDCHF",0) + weights.get("USDCAD",0) - weights.get("AUDUSD",0) - weights.get("NZDUSD",0)) / 7,
+            "EUR 🇪🇺": (weights.get("EURUSD",0)) * 1.2, # Semplificato basato su cross principali
+            "GBP 🇬🇧": (weights.get("GBPUSD",0)) * 1.2,
+            "JPY 🇯🇵": (-weights.get("USDJPY",0)),
+            "CHF 🇨🇭": (-weights.get("USDCHF",0)),
+            "AUD 🇦🇺": (weights.get("AUDUSD",0)),
+            "CAD 🇨🇦": (-weights.get("USDCAD",0)),
+            "NZD 🇳🇿": (weights.get("NZDUSD",0))
+        }
+        return pd.Series(strength).sort_values(ascending=False)
+    except:
+        return pd.Series(dtype=float)
 
 def get_currency_strength():
     try:
@@ -185,6 +212,39 @@ logging.disable(logging.CRITICAL)
 if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
+
+# --- CONFIGURAZIONE ASSET ---
+asset_map = {
+    "EUR/USD": "EURUSD",
+    "GBP/USD": "GBPUSD",
+    "EUR/JPY": "EURJPY",
+    "USD/JPY": "USDJPY",
+    "AUD/USD": "AUDUSD",
+    "USD/CHF": "USDCHF",
+    "NZD/USD": "NZDUSD",
+    "EUR/GBP": "EURGBP",
+    "USD/CAD": "USDCAD"
+    }
+
+def get_now_rome():
+    return datetime.now(pytz.timezone('Europe/Rome'))
+
+def send_telegram_msg(message):
+    # Placeholder se non hai configurato il bot, altrimenti crasha
+    if "TELEGRAM_TOKEN" in st.secrets:
+        # Qui andrebbe il codice request post, per ora stampiamo solo
+        print(f"Telegram Log: {message}")
+    else:
+        pass 
+
+def get_session_status():
+    # Semplificazione della tua logica orari
+    h = datetime.now(pytz.utc).hour
+    return {
+        "Tokyo": 0 <= h < 9,
+        "Londra": 8 <= h < 17,
+        "New York": 13 <= h < 22
+    }
 
 # --- SIDEBAR ACCESS ---
 st.sidebar.title("🔐 Accesso IQ Option")
@@ -349,24 +409,16 @@ if st.sidebar.button("🔊 TEST ALERT COMPLETO"):
     if 'alert_notified' in st.session_state: del st.session_state['alert_notified']
     st.rerun()
 
-# Reset Sidebar
-st.sidebar.markdown("---")
 with st.sidebar.popover("🗑️ **Reset Cronologia**"):
     st.warning("Sei sicuro? Questa azione cancellerà tutti i segnali salvati.")
 
     if st.button("SÌ, CANCELLA ORA"):
-        st.session_state['signal_history'] = pd.DataFrame(columns=['DataOra', 'Asset', 'Direzione', 'Prezzo', 'SL', 'TP', 'Size', 'Stato'])
-        save_history_permanently() # Questo sovrascrive il file CSV con uno vuoto
+        # Resettiamo sia la lista trades che il dataframe history
+        st.session_state['trades'] = []
+        st.session_state['signal_history'] = pd.DataFrame()
         st.rerun()
 
 st.sidebar.markdown("---")
-
-#if st.sidebar.button("TEST ALERT"):
-    #st.session_state['last_alert'] = {'Asset': 'TEST/EUR', 'Direzione': 'COMPRA', 'Prezzo': '1.0000', 'TP': '1.0100', 'SL': '0.9900', 'Protezione': 'Standard'}
-    #if 'alert_start_time' in st.session_state: del st.session_state['alert_start_time']
-    #st.rerun()
-
-#st.sidebar.markdown("---")
 
 # --- CONFIGURAZIONE PAGINA E BANNER ---
 # Banner logic
@@ -415,141 +467,153 @@ else:
 st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m).")
 st.caption(f"Ultimo aggiornamento globale: {get_now_rome().strftime('%Y-%m-%d %H:%M:%S')}")
 
-st.markdown("---")
-#st.subheader("📈 Grafico in tempo reale")
-st.subheader(f"📈 Grafico {selected_label} (1m) con BB e RSI")
+# --- NUOVO BLOCCO GRAFICO (SOLO DATI IQ OPTION) ---
+st.subheader(f"📈 Grafico {selected_label} (1m) - Dati IQ Option")
 
-p_unit, price_fmt, p_mult, a_type = get_asset_params(pair)
-df_rt = get_realtime_data(pair) 
-df_d = yf.download(pair, period="1y", interval="1d", progress=False)
-
-if df_rt is not None and not df_rt.empty and df_d is not None and not df_d.empty:
-    
-    # Pulizia dati
-    if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
-    df_d.columns = [c.lower() for c in df_d.columns]
-    
-    # Calcolo indicatori
-    bb = ta.bbands(df_rt['close'], length=20, std=2)
-    df_rt = pd.concat([df_rt, bb], axis=1)
-    df_rt['rsi'] = ta.rsi(df_rt['close'], length=14)
-    df_d['rsi'] = ta.rsi(df_d['close'], length=14)
-    df_d['atr'] = ta.atr(df_d['high'], df_d['low'], df_d['close'], length=14)
-          
-    c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
-    c_mid = [c for c in df_rt.columns if "BBM" in c.upper()][0]
-    c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
-    
-    curr_p = float(df_rt['close'].iloc[-1])
-    curr_rsi = float(df_rt['rsi'].iloc[-1])
-    rsi_val = float(df_d['rsi'].iloc[-1]) 
-    last_atr = float(df_d['atr'].iloc[-1])
-    
-    score = 50 + (20 if curr_p < df_rt[c_low].iloc[-1] else -20 if curr_p > df_rt[c_up].iloc[-1] else 0)
-
-    # --- COSTRUZIONE GRAFICO ---
-    p_df = df_rt.tail(60)
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                        vertical_spacing=0.05, row_heights=[0.75, 0.25])
-    
-    # Candele
-    fig.add_trace(go.Candlestick(
-        x=p_df.index, open=p_df['open'], high=p_df['high'], 
-        low=p_df['low'], close=p_df['close'], name='Prezzo'
-    ), row=1, col=1)
-    
-    # Bande Bollinger
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_up], line=dict(color='rgba(0, 191, 255, 0.6)', width=1), name='Upper BB'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_mid], line=dict(color='rgba(0, 0, 0, 0.3)', width=1), name='BBM'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_low], line=dict(color='rgba(0, 191, 255, 0.6)', width=1), fill='tonexty', fillcolor='rgba(0, 191, 255, 0.15)', name='Lower BB'), row=1, col=1)
-
-    # RSI
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['rsi'], line=dict(color='#ffcc00', width=2), name='RSI'), row=2, col=1)
-    fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dot", line_color="#00ff00", row=2, col=1)
-
-    # --- AGGIUNTA GRIGLIA VERTICALE (OGNI 10 MINUTI) ---
-    for t in p_df.index:
-        if t.minute % 10 == 0:
-            fig.add_vline(x=t, line_width=0.5, line_dash="solid", line_color="rgba(0, 0, 0, 0.3)", layer="below")
-
-    # Layout Grafico
-    fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=30,b=0), legend=dict(orientation="h", y=1.02))
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 4. Metriche Base
-    c_met1, c_met2 = st.columns(2)
-    c_met1.metric(label=f"Prezzo {selected_label}", value=price_fmt.format(curr_p))
-    c_met2.metric(label="RSI (5m)", value=f"{curr_rsi:.1f}", delta="Ipercomprato" if curr_rsi > 70 else "Ipervenduto" if curr_rsi < 30 else "Neutro", delta_color="inverse")
-    
-    st.caption(f"📢 RSI Daily: {rsi_val:.1f} | Divergenza: {detect_divergence(df_d)}")
-
-    # --- VISUALIZZAZIONE METRICHE AVANZATE (ADX & AI) ---
-    adx_df_ai = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
-    curr_adx_ai = adx_df_ai['ADX_14'].iloc[-1]
-
-# --- 8. CURRENCY STRENGTH ---
-st.markdown("---")
-st.subheader("⚡ Currency Strength Meter")
-s_data = get_currency_strength()
-
-if not s_data.empty:
-    cols = st.columns(len(s_data))
-    for i, (curr, val) in enumerate(s_data.items()):
-        bg = "#006400" if val > 0.15 else "#8B0000" if val < -0.15 else "#333333"
-        txt_c = "#00FFCC" if val > 0.15 else "#FF4B4B" if val < -0.15 else "#FFFFFF"
-        cols[i].markdown(
-            f"<div style='text-align:center; background:{bg}; padding:6px; border-radius:8px; border:1px solid {txt_c}; min-height:80px;'>"
-            f"<b style='color:white; font-size:0.8em;'>{curr}</b><br>"
-            f"<span style='color:{txt_c};'>{val:.2f}%</span></div>", 
-            unsafe_allow_html=True
-        )
-else:
-    st.info("⏳ Caricamento dati macro in corso...")
-
-# --- 9. CRONOLOGIA SEGNALI (CON COLORI DINAMICI) ---
-st.markdown("---")
-st.subheader("📜 Cronologia Segnali")
-
-if not st.session_state['signal_history'].empty:
-    display_df = st.session_state['signal_history'].copy()
-    display_df = display_df.sort_values(by='DataOra', ascending=False)
-
+# Verifica connessione prima di scaricare
+if st.session_state['iq_api'] and st.session_state['iq_api'].check_connect():
     try:
-        # Applichiamo gli stili a colonne diverse
-        styled_df = display_df.style.map(
-            style_status, subset=['Stato']
-        ).map(
-            style_protection, subset=['Protezione']
-        )
+        # 1. Scarichiamo 300 candele da 60 secondi (ultime 5 ore circa)
+        # pair viene preso dalla selectbox definita sopra (es. 'EURUSD')
+        candles_data = st.session_state['iq_api'].get_candles(pair, 60, 300, time_lib.time())
+        
+        df_rt = pd.DataFrame(candles_data)
+        
+        if not df_rt.empty:
+            # Rinomina colonne per compatibilità indicatori
+            df_rt.rename(columns={'max': 'high', 'min': 'low', 'open': 'open', 'close': 'close', 'from': 'time'}, inplace=True)
+            
+            # Conversione timestamp in data leggibile (Timezone Roma)
+            df_rt['time'] = pd.to_datetime(df_rt['time'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Europe/Rome')
+            df_rt.set_index('time', inplace=True)
 
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            hide_index=True,
-            column_order=[
-                'DataOra', 'Asset', 'Direzione', 'Prezzo', 
-                'TP', 'SL', 'Stato', 'Protezione', 
-                'Investimento €', 'Risultato €'
-            ]
-        )
+            # 2. Calcolo Indicatori sui dati IQ
+            # Bande di Bollinger
+            bb = ta.bbands(df_rt['close'], length=20, std=2)
+            df_rt = pd.concat([df_rt, bb], axis=1)
+            
+            # RSI
+            df_rt['rsi'] = ta.rsi(df_rt['close'], length=14)
+
+            # Definizione nomi colonne dinamici generati da pandas_ta
+            c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
+            c_mid = [c for c in df_rt.columns if "BBM" in c.upper()][0]
+            c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
+
+            # Dati attuali per le metriche
+            curr_p = df_rt['close'].iloc[-1]
+            curr_rsi = df_rt['rsi'].iloc[-1]
+
+            # --- COSTRUZIONE GRAFICO PLOTLY ---
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                                vertical_spacing=0.05, row_heights=[0.75, 0.25])
+            
+            # Candele (Prezzo)
+            fig.add_trace(go.Candlestick(
+                x=df_rt.index, open=df_rt['open'], high=df_rt['high'], 
+                low=df_rt['low'], close=df_rt['close'], name='Prezzo'
+            ), row=1, col=1)
+            
+            # Bande Bollinger
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(0, 191, 255, 0.6)', width=1), name='Upper BB'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(0, 191, 255, 0.6)', width=1), fill='tonexty', fillcolor='rgba(0, 191, 255, 0.1)', name='Lower BB'), row=1, col=1)
+
+            # RSI
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='#ffcc00', width=2), name='RSI'), row=2, col=1)
+            fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="#00ff00", row=2, col=1)
+
+            # Layout scuro
+            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=10,b=0))
+            
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Metriche sotto il grafico
+            c1, c2 = st.columns(2)
+            c1.metric("Prezzo Attuale", f"{curr_p:.5f}")
+            c2.metric("RSI (14)", f"{curr_rsi:.2f}", delta="Ipercomprato" if curr_rsi > 70 else "Ipervenduto" if curr_rsi < 30 else "Neutro")
+
+        else:
+            st.warning("Dati vuoti ricevuti da IQ Option. Riprova.")
+            
     except Exception as e:
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    # 4. Pulsante esportazione (Sempre dentro l'IF, ma fuori dal TRY/EXCEPT)
-    st.write("") 
-    csv_data = display_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Esporta Cronologia (CSV)",
-        data=csv_data,
-        file_name=f"trading_history_{datetime.now(rome_tz).strftime("%Y-%m-%d %H:%M:%S")}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-    
-# 5. Se la cronologia è vuota (allineato all'IF iniziale)
+        st.error(f"Errore nel caricamento grafico: {e}")
 else:
-    st.info("Nessun segnale registrato.")
+    st.info("⚠️ Connettiti a IQ Option per visualizzare il grafico in tempo reale.")
+
+# --- 8. CURRENCY STRENGTH (DATI REAL-TIME IQ OPTION) ---
+st.markdown("---")
+st.subheader("⚡ IQ Sentinel - Currency Strength (1h)")
+
+if st.session_state['iq_api']:
+    s_data = get_iq_currency_strength(st.session_state['iq_api'])
+
+    if not s_data.empty:
+        # Creiamo 4 colonne per riga per non affollare la UI su mobile
+        rows = [st.columns(4), st.columns(4)]
+        for i, (curr, val) in enumerate(s_data.items()):
+            # Determina la riga (0 o 1) e la colonna (0, 1, 2, 3)
+            r_idx = 0 if i < 4 else 1
+            c_idx = i % 4
+            
+            # Colori dinamici: Verde per forza, Rosso per debolezza
+            color_intensity = min(abs(val) * 5, 1.0) # Normalizza l'intensità
+            if val > 0.05:
+                bg = f"rgba(0, 128, 0, {color_intensity})" # Verde
+                border = "#00FFCC"
+            elif val < -0.05:
+                bg = f"rgba(139, 0, 0, {color_intensity})" # Rosso
+                border = "#FF4B4B"
+            else:
+                bg = "#333333" # Neutro
+                border = "#888888"
+
+            rows[r_idx][c_idx].markdown(
+                f"""
+                <div style='text-align:center; background:{bg}; padding:10px; 
+                            border-radius:10px; border:2px solid {border}; margin-bottom:10px;'>
+                    <b style='color:white; font-size:0.9em;'>{curr}</b><br>
+                    <span style='color:white; font-weight:bold; font-size:1.1em;'>{val:+.2f}%</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+    else:
+        st.info("🔍 Analisi dei flussi IQ Option in corso...")
+else:
+    st.warning("🔌 Connetti il bot per analizzare la forza delle valute.")
+
+# --- 9. CRONOLOGIA OPERATIVA UNIFICATA ---
+st.markdown("---")
+st.subheader("📜 Cronologia Operazioni Sessione")
+
+# Uniamo le due fonti di dati (trades della sessione corrente)
+if st.session_state['trades']:
+    df_trades = pd.DataFrame(st.session_state['trades'])
+    
+    # Mostra la tabella pulita
+    st.dataframe(
+        df_trades, 
+        use_container_width=True, 
+        hide_index=True
+    )
+
+    # Export CSV
+    csv = df_trades.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Scarica Report CSV",
+        data=csv,
+        file_name=f"report_sentinel_{datetime.now().strftime('%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+    # Calcolo totale finale visuale
+    totale = st.session_state['daily_pnl']
+    colore_totale = "green" if totale >= 0 else "red"
+    st.markdown(f"### 💰 PnL Netto: :{colore_totale}[${totale:.2f}]")
+
+else:
+    st.info("Nessuna operazione registrata in questa sessione.")
 
 # --- REPORTING ---
 st.divider()
@@ -560,6 +624,3 @@ if st.session_state['trades']:
 if st.session_state['trades']:
     st.subheader("📜 Cronologia Sessione")
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
-
-
-
