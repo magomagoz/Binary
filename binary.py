@@ -198,14 +198,19 @@ paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, hel
 
 
 st.sidebar.divider()
-st.sidebar.subheader("🌍 Sessioni")
+st.sidebar.subheader("🌍 Sessioni di mercato")
 for s_name, is_open in get_session_status().items():
     color = "🟢" if is_open else "🔴"
     st.sidebar.markdown(f"**{s_name}**: {'Open' if is_open else 'Closed'} {color}")
 
-with st.sidebar.popover("🗑️ Reset Cronologia"):
-    if st.button("CANCELLA ORA"):
-        st.session_state['trades'] = []
+# Reset Sidebar
+st.sidebar.markdown("---")
+with st.sidebar.popover("🗑️ **Reset Cronologia**"):
+    st.warning("Sei sicuro? Questa azione cancellerà tutti i segnali salvati.")
+
+    if st.button("SÌ, CANCELLA ORA"):
+        st.session_state['signal_history'] = pd.DataFrame(columns=['DataOra', 'Asset', 'Direzione', 'Prezzo', 'SL', 'TP', 'Size', 'Stato'])
+        save_history_permanently() # Questo sovrascrive il file CSV con uno vuoto
         st.rerun()
 
 # --- MAIN INTERFACE ---
