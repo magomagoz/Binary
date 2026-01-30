@@ -145,9 +145,9 @@ else:
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
-target_profit = st.sidebar.number_input("Target Profit (€)", value=100.0)
-stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=30.0)
 stake = st.sidebar.number_input("Stake Singolo (€)", value=20.0)
+target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
+stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -220,6 +220,7 @@ else:
 
 # --- GRAFICO IN TEMPO REALE ---
 st.divider()
+st.subheader(f"📈 Grafico {selected_label} (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
 
