@@ -337,30 +337,88 @@ st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; bord
 time_lib.sleep(60)
 st.rerun()
 
+# --- SEZIONE ANALISI TECNICA POST-SESSIONE (DEEP ANALYSIS) ---
 st.markdown("---")
-st.subheader("🔬 Analisi Tecnica Post-Sessione")
+st.subheader("🔬 Sentinel Deep Analysis")
 
 if st.session_state['trades']:
     df_analysis = pd.DataFrame(st.session_state['trades'])
     
-    # Analisi efficacia indicatori
+    # 1. Metriche di Performance Indicatori
     avg_rsi_win = df_analysis[df_analysis['Esito'] == 'WIN']['RSI'].mean()
     avg_adx_win = df_analysis[df_analysis['Esito'] == 'WIN']['ADX'].mean()
+    win_rate = (len(df_analysis[df_analysis['Esito'] == 'WIN']) / len(df_analysis)) * 100
     
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("RSI Medio (WIN)", f"{avg_rsi_win:.2f}")
     c2.metric("ADX Medio (WIN)", f"{avg_adx_win:.2f}")
-    c3.metric("Segnali Totali", len(df_analysis))
+    c3.metric("Win Rate", f"{win_rate:.1f}%")
+    c4.metric("Segnali Totali", len(df_analysis))
 
-    # Grafico a dispersione per vedere dove si concentrano i successi
-    fig_an = go.Figure()
-    fig_an.add_trace(go.Scatter(
-        x=df_analysis['RSI'], y=df_analysis['ADX'],
-        mode='markers',
-        marker=dict(color=['green' if e == 'WIN' else 'red' for e in df_analysis['Esito']], size=12),
-        text=df_analysis['Asset']
-    ))
-    fig_an.update_layout(title="Distribuzione Segnali (RSI vs ADX)", xaxis_title="RSI", yaxis_title="ADX", template="plotly_dark")
-    st.plotly_chart(fig_an, use_container_width=True)
+    # 2. Visualizzazione Grafica (RSI vs ADX e ATR)
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        # Grafico a dispersione per vedere dove si concentrano i successi
+        fig_an = go.Figure()
+        fig_an.add_trace(go.Scatter(
+            x=df_analysis['RSI'], y=df_analysis['ADX'],
+            mode='markers',
+            marker=dict(
+                color=['#00ffcc' if e == 'WIN' else '#ff4b4b' for e in df_analysis['Esito']], 
+                size=12,
+                line=dict(width=1, color='white')
+            ),
+            text=df_analysis['Asset']
+        ))
+        fig_an.update_layout(
+            title="Distribuzione Segnali (RSI vs ADX)", 
+            xaxis_title="RSI", yaxis_title="ADX", 
+            template="plotly_dark",
+            height=350,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig_an, use_container_width=True)
+
+    with col_g2:
+        # Analisi ATR vs Esito (Impatto Volatilità)
+        fig_atr = go.Figure()
+        fig_atr.add_trace(go.Box(
+            x=df_analysis['Esito'], 
+            y=df_analysis['ATR'], 
+            name="Volatilità ATR",
+            marker_color='#00bfff'
+        ))
+        fig_atr.update_layout(
+            title="Impatto Volatilità (ATR)", 
+            template="plotly_dark", 
+            height=350,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig_atr, use_container_width=True)
+
+    # 3. Tabella Storico Dettagliata con formattazione
+    st.write("📑 **Dettaglio Tecnico Operazioni**")
+    
+    def color_result(val):
+        color = '#006400' if val == 'WIN' else '#8B0000'
+        return f'background-color: {color}; color: white'
+
+    st.dataframe(
+        df_analysis.style.applymap(color_result, subset=['Esito']), 
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # 4. Tasto di Esportazione CSV
+    csv = df_analysis.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 SCARICA REPORT ANALITICO (CSV)",
+        data=csv,
+        file_name=f"Sentinel_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
 else:
-    st.info("In attesa di dati per l'analisi statistica...")
+    st.info("⏳ In attesa della prima operazione per generare l'analisi statistica e il report.")
