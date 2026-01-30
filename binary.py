@@ -172,8 +172,8 @@ with st.sidebar.popover("🗑️ Reset Cronologia"):
         st.rerun()
 
 # --- MAIN INTERFACE ---
-st.image("banner1.png", use_container_width=True)
-st.title("🛰️ Sentinel AI - Binary Execution")
+st.image("banner.png", use_container_width=True)
+#st.title("🛰️ Sentinel AI - Binary Execution")
 
 # Logica Autorun
 if st.session_state['iq_api'] and st.session_state['trading_attivo']:
