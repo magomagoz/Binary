@@ -257,9 +257,12 @@ else:
 
 # --- GRAFICO IN TEMPO REALE ---
 st.divider()
-st.subheader(f"📈 Grafico con BB e RSI (1m)")
+st.subheader(f"📈 Grafico con Indicatori Sentinel (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
+
+# Inizializziamo df_rt come vuoto per evitare errori di definizione
+df_rt = pd.DataFrame()
 
 if st.session_state['iq_api']:
     try:
@@ -270,50 +273,64 @@ if st.session_state['iq_api']:
             df_rt['time'] = pd.to_datetime(df_rt['time'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Europe/Rome')
             df_rt.set_index('time', inplace=True)
             
-            # Indicatori
-            bb = ta.bbands(df_rt['close'], length=20, std=2)
+            # --- CALCOLO INDICATORI PER IL GRAFICO ---
+            # Bollinger
+            bb = ta.bbands(df_rt['close'], length=20, std=2.2)
             df_rt = pd.concat([df_rt, bb], axis=1)
-            df_rt['rsi'] = ta.rsi(df_rt['close'], length=14)
             c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
             c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
+            
+            # RSI (usiamo 7 come nella logica del segnale)
+            df_rt['rsi'] = ta.rsi(df_rt['close'], length=7)
+            
+            # ADX (Necessario per le metriche sotto)
+            adx_df = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
+            df_rt['adx'] = adx_df['ADX_14']
 
+            # Plotly
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
             fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='gray', width=1), name='BB Upper'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='gray', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), name='BB Upper'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
             fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='yellow'), name='RSI'), row=2, col=1)
-            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False)
+            fig.add_hline(y=75, line_dash="dot", line_color="red", row=2, col=1)
+            fig.add_hline(y=25, line_dash="dot", line_color="green", row=2, col=1)
+            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
-    except:
-        st.error("Errore caricamento grafico.")
+    except Exception as e:
+        st.error(f"Errore caricamento grafico: {e}")
 
-# --- METRICHE DINAMICHE SOTTO IL GRAFICO ---
-st.markdown("### 🔍 Sentinel Real-Time Oscillators")
-c1, c2, c3, c4 = st.columns(4)
+# --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
+if not df_rt.empty:
+    st.markdown("### 🔍 Sentinel Real-Time Oscillators")
+    c1, c2, c3, c4 = st.columns(4)
 
-# Calcolo valori attuali
-curr_p = df_rt['close'].iloc[-1]
-curr_rsi = df_rt['rsi'].iloc[-1]
-curr_adx = df_rt['adx'].iloc[-1] # Assicurati di aver calcolato ADX nel df
-bb_upper = df_rt[c_up].iloc[-1]
-bb_lower = df_rt[c_low].iloc[-1]
+    # Estrazione valori sicura
+    curr_p = df_rt['close'].iloc[-1]
+    curr_rsi = df_rt['rsi'].iloc[-1]
+    curr_adx = df_rt['adx'].iloc[-1]
+    bb_upper = df_rt[c_up].iloc[-1]
+    bb_lower = df_rt[c_low].iloc[-1]
 
-# Visualizzazione
-c1.metric("Prezzo", f"{curr_p:.5f}")
+    # Visualizzazione Metriche
+    c1.metric("Prezzo Attuale", f"{curr_p:.5f}")
 
-c2.metric("RSI (7)", f"{curr_rsi:.2f}", 
-          delta="IPER-COMPRATO" if curr_rsi > 75 else "IPER-VENDUTO" if curr_rsi < 25 else "NEUTRO",
-          delta_color="inverse" if curr_rsi > 75 or curr_rsi < 25 else "normal")
+    c2.metric("RSI (7)", f"{curr_rsi:.2f}", 
+              delta="IPER-COMPRATO" if curr_rsi > 75 else "IPER-VENDUTO" if curr_rsi < 25 else "NEUTRO",
+              delta_color="inverse" if curr_rsi > 75 or curr_rsi < 25 else "normal")
 
-c3.metric("ADX (14)", f"{curr_adx:.2f}", 
-          delta="FILTRO OK" if 15 < curr_adx < 35 else "NO TRADE",
-          delta_color="normal" if 15 < curr_adx < 35 else "inverse")
+    c3.metric("ADX (14)", f"{curr_adx:.2f}", 
+              delta="VOLATILITÀ OK" if 15 < curr_adx < 35 else "SCONSIGLIATO",
+              delta_color="normal" if 15 < curr_adx < 35 else "inverse")
 
-# Distanza dalle Bande
-dist_up = bb_upper - curr_p
-dist_low = curr_p - bb_lower
-c4.metric("Distanza BB", f"{min(dist_up, dist_low):.5f}", 
-          delta="TOCCATA" if dist_up <= 0 or dist_low <= 0 else "DISTANTE")
+    # Distanza dalle Bande
+    dist_up = bb_upper - curr_p
+    dist_low = curr_p - bb_lower
+    min_dist = min(abs(dist_up), abs(dist_low))
+    c4.metric("Distanza BB", f"{min_dist:.5f}", 
+              delta="TOCCATA" if dist_up <= 0 or dist_low <= 0 else "IN RANGE")
+else:
+    st.info("In attesa di dati in tempo reale per le metriche...")
 
 # --- CURRENCY STRENGTH ---
 st.divider()
