@@ -136,7 +136,7 @@ else:
                         if signal:
                             s.update(label=f"🔥 SEGNALE {signal} su {asset}!", state="running")
 
-                    				stake = 10 # Puoi legarlo a un input
+                    		stake = 10 # Puoi legarlo a un input
                             check, id = st.session_state['iq_api'].buy(stake, asset, signal.lower(), 1)
                             if check:
                         				st.write(f"✅ Ordine {signal} inviato. Attesa 60s...")
