@@ -131,47 +131,6 @@ def get_iq_currency_strength(API):
     except:
         return pd.Series(dtype=float)
 
-def get_currency_strength():
-    try:
-        forex = ["EURUSD", "GBPUSD", "USDCHF", "USDCHF", "AUDUSD", "NZDUSD", "EURCHF","EURJPY", "GBPJPY","EURGBP"]
-        data = yf.download(forex, period="5d", interval="1d", progress=False, timeout=15)
-        
-        if data is None or data.empty: 
-            return pd.Series(dtype=float)
-
-        if isinstance(data.columns, pd.MultiIndex):
-            if 'Close' in data.columns.get_level_values(0): close_data = data['Close']
-            else: close_data = data['Close'] if 'Close' in data else data
-        else:
-            close_data = data['Close'] if 'Close' in data else data
-
-        close_data = close_data.ffill().dropna()
-        if len(close_data) < 2: return pd.Series(dtype=float)
-
-        returns = close_data.pct_change().iloc[-1] * 100
-        
-        strength = {
-            "USD 🇺🇸": (-returns.get("EURUSD=X",0) - returns.get("GBPUSD=X",0) + returns.get("USDJPY=X",0) - returns.get("AUDUSD=X",0) + returns.get("USDCAD=X",0) + returns.get("USDCHF=X",0) - returns.get("NZDUSD=X",0) + returns.get("USDCNY=X",0) + returns.get("USDRUB=X",0) + returns.get("USDCOP=X",0) + returns.get("USDARS=X",0) + returns.get("USDBRL=X",0)) / 12,
-            "EUR 🇪🇺": (returns.get("EURUSD=X",0) + returns.get("EURJPY=X",0) + returns.get("EURGBP=X",0) + returns.get("EURCHF=X", 0) + returns.get("EURGBP=X", 0) + returns.get("EURJPY=X", 0)) / 6,
-            "GBP 🇬🇧": (returns.get("GBPUSD=X",0) + returns.get("GBPJPY=X",0) - returns.get("EURGBP=X",0) + returns.get("GBPCHF=X", 0) + returns.get("GBPJPY=X", 0)) / 5,
-            "JPY 🇯🇵": (-returns.get("USDJPY=X",0) - returns.get("EURJPY=X",0) - returns.get("GBPJPY=X",0)) / 3,
-            "CHF 🇨🇭": (-returns.get("USDCHF=X",0) - returns.get("EURCHF=X",0) - returns.get("GBPCHF=X",0)) / 3,
-            "AUD 🇦🇺": returns.get("AUDUSD=X", 0),
-            "NZD 🇳🇿": returns.get("NZDUSD=X", 0),
-            "CAD 🇨🇦": -returns.get("USDCAD=X", 0)
-            #"CNY 🇨🇳": -returns.get("CNY=X", 0),
-            #"RUB 🇷🇺": -returns.get("RUB=X", 0),
-            #"COP 🇨🇴": -returns.get("COP=X", 0),
-            #"ARS 🇦🇷": -returns.get("ARS=X", 0),
-            #"BRL 🇧🇷": -returns.get("BRL=X", 0),
-            #"MXN 🇲🇽": -returns.get("MXN=X", 0)
-            #"BTC ₿": returns.get("BTC-USD", 0),
-            #"ETH 💎": returns.get("ETH-USD", 0)
-        }
-        return pd.Series(strength).sort_values(ascending=False)
-    except Exception:
-        return pd.Series(dtype=float)
-
 # --- FUNZIONI TECNICHE ---
 def get_data_from_iq(API, asset):
     try:
@@ -482,7 +441,7 @@ elif not st.session_state['iq_api']:
 else:
     st.warning("⚠️ Il sistema è attualmente in pausa (Kill-switch attivo).")
 
-#st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su {len(asset_map)} asset Forex in tempo reale (1m).")
+#st.info(f"🛰️ **Sentinel AI Attiva**: Monitoraggio in corso su asset Forex in tempo reale (1m)")
 st.caption(f"Ultimo aggiornamento globale: {get_now_rome().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- NUOVO BLOCCO GRAFICO (SOLO DATI IQ OPTION) ---
