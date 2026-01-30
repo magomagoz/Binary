@@ -262,7 +262,7 @@ else:
         st.warning("⚠️ Bot in pausa.")
 
 # --- GRAFICO IN TEMPO REALE ---
-st.divider()
+st.divider(---)
 st.subheader(f"📈 Grafico con Indicatori Sentinel (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
@@ -305,6 +305,7 @@ if st.session_state['iq_api']:
             st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
+st.divider(---)
 
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
 if not df_rt.empty:
