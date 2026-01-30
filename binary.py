@@ -20,15 +20,14 @@ TELE_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 # --- CONFIGURAZIONE LOGGING & STATO ---
 logging.disable(logging.CRITICAL)
 
-# Inizializzazione variabili di stato
+# Inizializzazione rigorosa di TUTTE le variabili di stato
 if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
-# Queste mancavano e causano crash:
-if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] = False 
+if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] = False # Default spento finché non logghi
 if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
-if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa"
+if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di login..."
 
 # --- FUNZIONE DI CONNESSIONE ---
 def connect_to_iq(email, password):
@@ -228,12 +227,12 @@ else:
         st.rerun()
 
     # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
-    st.write("⏳ Prossimo check tra:")
-    progress_bar = st.progress(0)
-    for percent_complete in range(100):
-        time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
-        progress_bar.progress(percent_complete + 1)
-    st.rerun()
+    #st.write("⏳ Prossimo check tra:")
+    #progress_bar = st.progress(0)
+    #for percent_complete in range(100):
+        #time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+        #progress_bar.progress(percent_complete + 1)
+    #st.rerun()
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
@@ -377,6 +376,11 @@ with st.sidebar.popover("🗑️ **Reset Cronologia**"):
         st.session_state['signal_history'] = pd.DataFrame()
         st.rerun()
 
+if st.session_state['iq_api']:
+    if st.sidebar.button("🔄 Forza Aggiornamento"):
+        st.rerun()
+
+
 st.sidebar.markdown("---")
 
 # --- CONFIGURAZIONE PAGINA E BANNER ---
@@ -409,9 +413,21 @@ if st.session_state['iq_api'] and st.session_state.get('trading_attivo', True):
                 st.write(f"Analizzando {asset}...")
                 df = get_data_from_iq(API, asset)
                 signal = check_binary_signal(df)
-                
+                    
                 if signal:
+                    # --- RIPRODUZIONE SUONO ---
+                    # Usiamo un suono di sistema (Notification Bell)
+                    st.markdown(
+                        """
+                        <audio autoplay>
+                            <source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3">
+                        </audio>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
                     st.warning(f"🔥 Segnale {signal} trovato su {asset}!")
+                    
                     # ESECUZIONE REALE
                     check, id = API.buy(stake, asset, signal.lower(), 1)
                     if check:
