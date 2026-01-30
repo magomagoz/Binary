@@ -318,19 +318,28 @@ if st.session_state['iq_api']:
             adx_df = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
             df_rt['adx'] = adx_df['ADX_14']
 
-                # --- AGGIUNTA GRIGLIA VERTICALE (OGNI 10 MINUTI) ---
-            for t in p_df.index:
-                if t.minute % 10 == 0:
-                    fig.add_vline(x=t, line_width=0.5, line_dash="solid", line_color="rgba(0, 0, 0, 0.3)", layer="below")
-
             # Plotly
+            # --- CREAZIONE FIGURA ---
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
+            
+            # Candele
             fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
+            
+            # Bande di Bollinger
             fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), name='BB Upper'), row=1, col=1)
             fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
+            
+            # RSI
             fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='yellow'), name='RSI'), row=2, col=1)
             fig.add_hline(y=75, line_dash="dot", line_color="red", row=2, col=1)
             fig.add_hline(y=25, line_dash="dot", line_color="green", row=2, col=1)
+
+            # --- ORA PUOI AGGIUNGERE LE LINEE VERTICALI SE VUOI (OPZIONALE) ---
+            # Questo usa df_rt (non p_df) e avviene dopo aver creato fig
+            for t in df_rt.index:
+                if t.minute % 10 == 0:
+                    fig.add_vline(x=t, line_width=0.5, line_dash="dot", line_color="rgba(255, 255, 255, 0.1)")
+
             fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
