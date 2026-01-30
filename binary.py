@@ -4,6 +4,7 @@ import pandas_ta as ta
 from iqoptionapi.stable_api import IQ_Option
 import time as time_lib
 from datetime import datetime
+import pytz
 import logging
 
 # --- CONFIGURAZIONE INIZIALE ---
@@ -25,6 +26,22 @@ def get_data_from_iq(API, asset):
         return df
     except: return pd.DataFrame()
 
+# --- FUNZIONE ORARI MERCATI ---
+def is_market_open():
+    """Controlla se i mercati Forex sono aperti (Lun-Ven) e identifica le sessioni"""
+    now_utc = datetime.now(pytz.utc)
+    weekday = now_utc.weekday() # 0=Lun, 4=Ven, 5=Sab, 6=Dom
+    
+    if weekday >= 5: # Mercati chiusi nel weekend
+        return False, "Mercati Chiusi (Weekend)"
+    
+    hour = now_utc.hour
+    # Sessioni (UTC): Tokyo (00-09), Londra (08-17), New York (13-22)
+    if (0 <= hour <= 9) or (8 <= hour <= 17) or (13 <= hour <= 22):
+        return True, "Mercati Aperti"
+    
+    return False, "Pausa Mercato (Bassa Volatilità)"
+
 def check_binary_signal(df):
     """Logica di filtraggio per Win Rate > 60%"""
     if df.empty or len(df) < 20: return None
@@ -42,6 +59,12 @@ def check_binary_signal(df):
     curr_close = df['close'].iloc[-1]
     curr_rsi = rsi.iloc[-1]
     curr_adx = adx_df.iloc[-1, 0] # Colonna ADX_14
+
+    curr = df.iloc[-1]
+    if 15 < adx < 35:
+        if curr['close'] <= bb[bbl_col].iloc[-1] and rsi.iloc[-1] < 25: return "CALL"
+        elif curr['close'] >= bb[bbu_col].iloc[-1] and rsi.iloc[-1] > 75: return "PUT"
+    return None
     
     # Logica: Mean Reversion solo in bassa/media volatilità
     if 15 < curr_adx < 35:
@@ -84,7 +107,9 @@ stop_l = st.sidebar.number_input("Stop Loss ($)", 5.0, 500.0, 30.0)
 stake = st.sidebar.number_input("Investimento per Trade ($)", 1.0, 100.0, 10.0)
 
 # --- DASHBOARD OPERATIVA ---
-st.title("🛡️ Sentinel Binary Bot v2.5")
+st.title("🛡️ Sentinel Binary Bot v3.0")
+
+open_status, status_msg = is_market_open()
 
 if st.session_state['iq_api'] is None:
     st.info("👋 **Benvenuto!** Il bot è in attesa delle tue credenziali per iniziare il monitoraggio.")
@@ -108,12 +133,15 @@ else:
         timer_placeholder = st.empty()
         
         # Simulazione Scan (Si attiva ogni 60 secondi)
-        assets = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY"]
+        assets = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "]
         
         with st.status("🔍 Sentinel sta scansionando i mercati...", expanded=True) as status:
             for asset in assets:
                 st.write(f"Analisi tecnica su **{asset}**...")
                 df = get_data_from_iq(st.session_state['iq_api'], asset)
+                df = st.session_state['iq_api'].get_candles(asset, 60, 100, time_lib.time())
+                df = pd.DataFrame(df).rename(columns={'max':'high','min':'low','from':'time'})
+
                 signal = check_binary_signal(df)
                 
                 if signal:
@@ -132,11 +160,18 @@ else:
                         st.rerun()
                 else:
                     st.write(f"⚪ {asset}: Nessuna condizione ottimale.")
-            
+
             status.update(label="Scansione completata. In attesa del prossimo ciclo.", state="complete")
 
-    # Visualizzazione Cronologia
-    if st.session_state['trades']:
-        st.subheader("📜 Ultime Operazioni")
-        st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
+                # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
+                st.write("⏳ Prossimo check tra:")
+                progress_bar = st.progress(0)
+                for percent_complete in range(100):
+                    time_lib.sleep(0.6) # 0.6s * 100 = 60 secondi
+                    progress_bar.progress(percent_complete + 1)
+                st.rerun()
 
+# Visualizzazione Cronologia
+if st.session_state['trades']:
+    st.subheader("📜 Ultime Operazioni")
+    st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
