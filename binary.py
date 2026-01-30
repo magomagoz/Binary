@@ -133,23 +133,23 @@ else:
                         df = pd.DataFrame(df).rename(columns={'max':'high','min':'low','from':'time'})
                         signal = check_binary_signal(df)
                         
-                        if signal:
-                            s.update(label=f"🔥 SEGNALE {signal} su {asset}!", state="running")
+                    if signal:
+                        s.update(label=f"🔥 SEGNALE {signal} su {asset}!", state="running")
 
-                    		#stake = 10 # Puoi legarlo a un input
-                            check, id = st.session_state['iq_api'].buy(stake, asset, signal.lower(), 1)
-                            if check:
-                        		st.write(f"✅ Ordine {signal} inviato. Attesa 60s...")
-                                time_lib.sleep(62)
-                                res = st.session_state['iq_api'].check_win_v2(id)
-                                st.session_state['daily_pnl'] += res
-				               	st.session_state['trades'].append({
-        			            	"Ora": datetime.now().strftime("%H:%M"),
-              			            "Asset": asset, "Tipo": signal, "Esito": "WIN" if res > 0 else "LOSS"
-                    				})
-                        			st.rerun()
+                		#stake = 10 # Puoi legarlo a un input
+                        check, id = st.session_state['iq_api'].buy(stake, asset, signal.lower(), 1)
+                        if check:
+                    		st.write(f"✅ Ordine {signal} inviato. Attesa 60s...")
+                            time_lib.sleep(62)
+                            res = st.session_state['iq_api'].check_win_v2(id)
+                            st.session_state['daily_pnl'] += res
+				           	st.session_state['trades'].append({
+        		            	"Ora": datetime.now().strftime("%H:%M"),
+          			            "Asset": asset, "Tipo": signal, "Esito": "WIN" if res > 0 else "LOSS"
+                				})
+                    	st.rerun()
 
-            					status.update(label="Scansione completata. Prossimo ciclo tra 60s.", state="complete")
+            			status.update(label="Scansione completata. Prossimo ciclo tra 60s.", state="complete")
             								
                 # --- BARRA DEI 60 SECONDI (PROGRESSIVA) ---
                 st.write("⏳ Prossimo check tra:")
