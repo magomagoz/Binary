@@ -99,25 +99,29 @@ def get_iq_currency_strength(API):
         return pd.Series(dtype=float)
 
 def check_binary_signal(df):
-    if df.empty or len(df) < 20: return None
+    if df.empty or len(df) < 20: return None, {}
+    
+    # Calcolo Indicatori
     bb = ta.bbands(df['close'], length=20, std=2.2)
-    if bb is None: return None
-    
-    bbl_col = [c for c in bb.columns if 'BBL' in c][0]
-    bbu_col = [c for c in bb.columns if 'BBU' in c][0]
-    rsi = ta.rsi(df['close'], length=7)
+    rsi = ta.rsi(df['close'], length=7).iloc[-1]
     adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
+    adx = adx_df['ADX_14'].iloc[-1]
     
+    bbl = bb.iloc[-1, 0] # Lower Band
+    bbu = bb.iloc[-1, 2] # Upper Band
     curr_close = df['close'].iloc[-1]
-    curr_rsi = rsi.iloc[-1]
-    curr_adx = adx_df.iloc[-1, 0]
+    
+    # Snapshot dei valori per analisi
+    stats = {"RSI": round(rsi, 2), "ADX": round(adx, 2), "Price": curr_close, "BB_Low": round(bbl, 5), "BB_Up": round(bbu, 5)}
 
-    if 15 < curr_adx < 35:
-        if curr_close <= bb[bbl_col].iloc[-1] and curr_rsi < 25:
-            return "CALL"
-        elif curr_close >= bb[bbu_col].iloc[-1] and curr_rsi > 75:
-            return "PUT"
-    return None
+    # Logica Segnale
+    if 15 < adx < 35:
+        if curr_close <= bbl and rsi < 25:
+            return "CALL", stats
+        elif curr_close >= bbu and rsi > 75:
+            return "PUT", stats
+            
+    return None, stats
 
 # --- SIDEBAR: ACCESSO E CONFIGURAZIONE ---
 st.sidebar.title("🔐 Sentinel AI Access")
@@ -200,15 +204,22 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     st.warning(f"🔥 SEGNALE {signal} SU {asset}!")
                     
                     check, id = API.buy(stake, asset, signal.lower(), 1)
+    
                     if check:
                         st.info(f"✅ Ordine inviato. ID: {id}")
                         time_lib.sleep(62)
                         res = API.check_win_v2(id)
                         st.session_state['daily_pnl'] += res
                         st.session_state['trades'].append({
-                            "Ora": get_now_rome().strftime("%H:%M"),
-                            "Asset": asset, "Tipo": signal, 
-                            "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res
+                            "Ora": get_now_rome().strftime("%H:%M:%S"),
+                            "Asset": asset,
+                            "Tipo": signal,
+                            "Prezzo Entrata": stats["Price"],
+                            "RSI": stats["RSI"],
+                            "ADX": stats["ADX"],
+                            "BB_Limit": stats["BB_Low"] if signal == "CALL" else stats["BB_Up"],
+                            "Esito": "WIN" if res > 0 else "LOSS",
+                            "Profitto": res
                         })
                         st.rerun()
             status.update(label="✅ Scansione completata. In attesa...", state="complete")
@@ -250,6 +261,34 @@ if st.session_state['iq_api']:
     except:
         st.error("Errore caricamento grafico.")
 
+# --- METRICHE DINAMICHE SOTTO IL GRAFICO ---
+st.markdown("### 🔍 Sentinel Real-Time Oscillators")
+c1, c2, c3, c4 = st.columns(4)
+
+# Calcolo valori attuali
+curr_p = df_rt['close'].iloc[-1]
+curr_rsi = df_rt['rsi'].iloc[-1]
+curr_adx = df_rt['adx'].iloc[-1] # Assicurati di aver calcolato ADX nel df
+bb_upper = df_rt[c_up].iloc[-1]
+bb_lower = df_rt[c_low].iloc[-1]
+
+# Visualizzazione
+c1.metric("Prezzo", f"{curr_p:.5f}")
+
+c2.metric("RSI (7)", f"{curr_rsi:.2f}", 
+          delta="IPER-COMPRATO" if curr_rsi > 75 else "IPER-VENDUTO" if curr_rsi < 25 else "NEUTRO",
+          delta_color="inverse" if curr_rsi > 75 or curr_rsi < 25 else "normal")
+
+c3.metric("ADX (14)", f"{curr_adx:.2f}", 
+          delta="FILTRO OK" if 15 < curr_adx < 35 else "NO TRADE",
+          delta_color="normal" if 15 < curr_adx < 35 else "inverse")
+
+# Distanza dalle Bande
+dist_up = bb_upper - curr_p
+dist_low = curr_p - bb_lower
+c4.metric("Distanza BB", f"{min(dist_up, dist_low):.5f}", 
+          delta="TOCCATA" if dist_up <= 0 or dist_low <= 0 else "DISTANTE")
+
 # --- CURRENCY STRENGTH ---
 st.divider()
 st.subheader("⚡ Currency Strength (IQ Option Data)")
@@ -271,3 +310,31 @@ if st.session_state['trades']:
 st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; border-radius:10px; overflow:hidden;"><div style="background:red; height:100%; width:100%; animation: fill 60s linear infinite;"></div></div><style>@keyframes fill {0% {width: 0%;} 100% {width: 100%;}}</style>""", unsafe_allow_html=True)
 time_lib.sleep(60)
 st.rerun()
+
+st.markdown("---")
+st.subheader("🔬 Analisi Tecnica Post-Sessione")
+
+if st.session_state['trades']:
+    df_analysis = pd.DataFrame(st.session_state['trades'])
+    
+    # Analisi efficacia indicatori
+    avg_rsi_win = df_analysis[df_analysis['Esito'] == 'WIN']['RSI'].mean()
+    avg_adx_win = df_analysis[df_analysis['Esito'] == 'WIN']['ADX'].mean()
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("RSI Medio (WIN)", f"{avg_rsi_win:.2f}")
+    c2.metric("ADX Medio (WIN)", f"{avg_adx_win:.2f}")
+    c3.metric("Segnali Totali", len(df_analysis))
+
+    # Grafico a dispersione per vedere dove si concentrano i successi
+    fig_an = go.Figure()
+    fig_an.add_trace(go.Scatter(
+        x=df_analysis['RSI'], y=df_analysis['ADX'],
+        mode='markers',
+        marker=dict(color=['green' if e == 'WIN' else 'red' for e in df_analysis['Esito']], size=12),
+        text=df_analysis['Asset']
+    ))
+    fig_an.update_layout(title="Distribuzione Segnali (RSI vs ADX)", xaxis_title="RSI", yaxis_title="ADX", template="plotly_dark")
+    st.plotly_chart(fig_an, use_container_width=True)
+else:
+    st.info("In attesa di dati per l'analisi statistica...")
