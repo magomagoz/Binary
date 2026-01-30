@@ -99,26 +99,51 @@ def get_iq_currency_strength(API):
         return pd.Series(dtype=float)
 
 def check_binary_signal(df):
-    if df.empty or len(df) < 20: return None, {}
+    if df.empty or len(df) < 200: # Servono 200 candele per l'EMA
+        return None, {}
     
-    # Calcolo Indicatori
+    # --- CALCOLO INDICATORI ---
+    # Bollinger & RSI
     bb = ta.bbands(df['close'], length=20, std=2.2)
     rsi = ta.rsi(df['close'], length=7).iloc[-1]
+    
+    # ADX & ATR
     adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
     adx = adx_df['ADX_14'].iloc[-1]
+    atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
     
-    bbl = bb.iloc[-1, 0] # Lower Band
-    bbu = bb.iloc[-1, 2] # Upper Band
+    # EMA 200 (Trend Primario)
+    ema200 = ta.ema(df['close'], length=200).iloc[-1]
+    
+    # Stocastico (K=14, D=3)
+    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
+    curr_stoch_k = stoch['STOCHk_14_3_3'].iloc[-1]
+    
+    # Limiti Bande
+    bbl = bb.iloc[-1, 0]
+    bbu = bb.iloc[-1, 2]
     curr_close = df['close'].iloc[-1]
     
-    # Snapshot dei valori per analisi
-    stats = {"RSI": round(rsi, 2), "ADX": round(adx, 2), "Price": curr_close, "BB_Low": round(bbl, 5), "BB_Up": round(bbu, 5)}
+    # Snapshot completo per Cronologia
+    stats = {
+        "Price": curr_close,
+        "RSI": round(rsi, 2),
+        "ADX": round(adx, 2),
+        "ATR": round(atr, 5),
+        "EMA200": round(ema200, 5),
+        "Stoch_K": round(curr_stoch_k, 2),
+        "Trend": "UP" if curr_close > ema200 else "DOWN"
+    }
 
-    # Logica Segnale
+    # --- LOGICA DI FILTRO AVANZATA ---
+    # 1. Filtro Volatilità (ADX)
     if 15 < adx < 35:
-        if curr_close <= bbl and rsi < 25:
+        # 2. Condizione CALL (Ipervenduto + Stocastico basso + Sopra EMA200 per sicurezza)
+        if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
             return "CALL", stats
-        elif curr_close >= bbu and rsi > 75:
+            
+        # 3. Condizione PUT (Ipercomprato + Stocastico alto + Sotto EMA200 per sicurezza)
+        elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
             return "PUT", stats
             
     return None, stats
@@ -204,23 +229,24 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     st.warning(f"🔥 SEGNALE {signal} SU {asset}!")
                     
                     check, id = API.buy(stake, asset, signal.lower(), 1)
-    
                     if check:
                         st.info(f"✅ Ordine inviato. ID: {id}")
                         time_lib.sleep(62)
                         res = API.check_win_v2(id)
                         st.session_state['daily_pnl'] += res
                         st.session_state['trades'].append({
-                            "Ora": get_now_rome().strftime("%H:%M:%S"),
-                            "Asset": asset,
-                            "Tipo": signal,
-                            "Prezzo Entrata": stats["Price"],
-                            "RSI": stats["RSI"],
-                            "ADX": stats["ADX"],
-                            "BB_Limit": stats["BB_Low"] if signal == "CALL" else stats["BB_Up"],
-                            "Esito": "WIN" if res > 0 else "LOSS",
-                            "Profitto": res
-                        })
+                        "Ora": get_now_rome().strftime("%H:%M:%S"),
+                        "Asset": asset,
+                        "Tipo": signal,
+                        "Esito": "WIN" if res > 0 else "LOSS",
+                        "Profitto": res,
+                        "RSI": stats["RSI"],
+                        "ADX": stats["ADX"],
+                        "Stoch": stats["Stoch_K"],
+                        "ATR": stats["ATR"],
+                        "EMA_Dist": round(stats["Price"] - stats["EMA200"], 5),
+                        "Trend": stats["Trend"]
+                    })
                         st.rerun()
             status.update(label="✅ Scansione completata. In attesa...", state="complete")
 else:
