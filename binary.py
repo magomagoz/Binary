@@ -60,14 +60,9 @@ def get_session_status():
     ora_roma = datetime.now(pytz.timezone('Europe/Rome')).hour
     
     return {
-        # Tokyo apre alle 01:00 e chiude alle 07:00/08:00 ora italiana
-        "Tokyo 🇯🇵": 1 <= ora_roma < 8,
-        
-        # Londra apre alle 09:00 e chiude alle 17:30 ora italiana
-        "Londra 🇬🇧": 9 <= ora_roma < 18,
-        
-        # New York apre alle 14:30/15:30 e chiude alle 22:00 ora italiana
-        "New York 🇺🇸": 15 <= ora_roma < 22
+        "Tokyo 🇯🇵": 0 <= ora_roma < 9,
+        "Londra 🇬🇧": 9 <= ora_roma < 18,        
+        "New York 🇺🇸": 14 <= ora_roma < 23
     }
 
 # --- FUNZIONI TECNICHE IQ OPTION ---
