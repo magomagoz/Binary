@@ -436,7 +436,7 @@ if st.session_state['iq_api']:
 
 st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
-st.warning(f"🔍 Sentinel Real-Time Oscillators")
+st.markdown("🔍 Sentinel Real-Time Oscillators")
 
 if not df_rt.empty:
     c1, c2, c3, c4 = st.columns(4)
@@ -485,10 +485,10 @@ st.subheader(f"📊 Analisi Operativa")
 
 col_res1, col_res2 = st.columns(2)
 with col_res1:
-    st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
+    st.markdown("💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
 with col_res2:
     sim_pnl = st.session_state.get('sim_pnl', 0.0)
-    st.subheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
+    st.markdown("🧪 Profitto Simulato: € {sim_pnl:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
