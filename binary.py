@@ -543,7 +543,7 @@ if st.session_state['iq_api']:
             
             # Bande di Bollinger con riempimento (BBM inclusa)
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_up], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), name='Upper BB'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_mid], line=dict(color='rgba(255, 255, 255, 0.2)', width=1, dash='dot'), name='BBM'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_mid], line=dict(color='rgba(100, 100, 100, 0.2)', width=1, dash='dot'), name='BBM'), row=1, col=1)
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_low], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), fill='tonexty', fillcolor='rgba(0, 191, 255, 0.05)', name='Lower BB'), row=1, col=1)
 
             # RSI con soglie colorate
