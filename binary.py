@@ -47,6 +47,7 @@ if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
 if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] = False
+    check_market_alerts()
 if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
@@ -91,6 +92,27 @@ def get_session_status():
         #"Weekend": True
     }
 
+def check_market_alerts():
+    now = datetime.now(pytz.timezone('Europe/Rome'))
+    current_time = now.strftime("%H:%M")
+    
+    # Definiamo gli orari di apertura e chiusura
+    alerts = {
+        "01:00": "🇯🇵 Apertura Borsa di TOKYO",
+        "08:00": "🇯🇵 Chiusura Borsa di TOKYO",
+        "09:00": "🇬🇧 Apertura Borsa di LONDRA",
+        "15:30": "🇺🇸 Apertura Borsa di NEW YORK",
+        "18:00": "🇬🇧 Chiusura Borsa di LONDRA",
+        "22:00": "🇺🇸 Chiusura Borsa di NEW YORK"
+    }
+    
+    if current_time in alerts:
+        # Usiamo il session_state per non inviare il messaggio 60 volte nello stesso minuto
+        if st.session_state.get("last_market_alert") != current_time:
+            msg = f"🔔 *MARKET UPDATE*\n{alerts[current_time]}"
+            send_telegram_msg(msg)
+            st.session_state["last_market_alert"] = current_time
+
 # --- FUNZIONI TECNICHE IQ OPTION ---
 def get_data_from_iq(API, asset):
     try:
@@ -127,10 +149,57 @@ def get_iq_currency_strength(API):
     except:
         return pd.Series(dtype=float)
 
+def detect_divergence(df):
+    try:
+        if len(df) < 10: return "N/A"
+        
+        # Prezzi e RSI ultimi 2 picchi
+        recent_close = df['close'].tail(10)
+        recent_rsi = df['rsi'].tail(10)
+        
+        # Logica semplificata:
+        # Divergenza Rialzista: Prezzo scende, RSI sale
+        if recent_close.iloc[-1] < recent_close.iloc[0] and recent_rsi.iloc[-1] > recent_rsi.iloc[0]:
+            return "BULLISH 🐂"
+        # Divergenza Ribassista: Prezzo sale, RSI scende
+        if recent_close.iloc[-1] > recent_close.iloc[0] and recent_rsi.iloc[-1] < recent_rsi.iloc[0]:
+            return "BEARISH 🐻"
+            
+        return "NESSUNA"
+    except:
+        return "N/A"
+
 def check_binary_signal(df):
     if df.empty or len(df) < 200: # Servono 200 candele per l'EMA
         return None, {}
     
+def send_daily_report():
+    now = datetime.now(pytz.timezone('Europe/Rome'))
+    # Invio del report alle 22:05 (subito dopo la chiusura di NY)
+    if now.strftime("%H:%M") == "22:05":
+        if st.session_state.get("last_daily_report_date") != now.date():
+            trades = st.session_state.get('trades', [])
+            if not trades:
+                msg = "📊 *REPORT GIORNALIERO SENTINEL*\nNessuna operazione effettuata oggi."
+            else:
+                df = pd.DataFrame(trades)
+                wins = len(df[df['Esito'] == 'WIN'])
+                losses = len(df[df['Esito'] == 'LOSS'])
+                win_rate = (wins / len(df)) * 100
+                pnl_tot = df['Profitto'].sum()
+                
+                msg = (
+                    f"📊 *REPORT GIORNALIERO SENTINEL*\n"
+                    f"📅 Data: {now.date()}\n\n"
+                    f"✅ Operazioni Vinte: {wins}\n"
+                    f"❌ Operazioni Perse: {losses}\n"
+                    f"📈 Win Rate: {win_rate:.1f}%\n"
+                    f"💰 *Profitto Totale: € {pnl_tot:.2f}*"
+                )
+            
+            send_telegram_msg(msg)
+            st.session_state["last_daily_report_date"] = now.date()
+
     # --- CALCOLO INDICATORI ---
     # Bollinger & RSI
     bb = ta.bbands(df['close'], length=20, std=2.2)
@@ -301,9 +370,15 @@ if st.session_state['iq_api']:
         </div>
     """, unsafe_allow_html=True)
 
-
 # Logica Autorun
 if st.session_state['iq_api'] and st.session_state['trading_attivo']:
+    
+    # 1. Controlla Alert Mercati (Apertura/Chiusura)
+    check_market_alerts()
+    
+    # 2. Controlla invio Report Giornaliero
+    send_daily_report()
+    
     if st.session_state['daily_pnl'] >= target_profit:
         st.balloons()
         st.success("🎯 Target raggiunto! Bot fermo.")
@@ -321,13 +396,6 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
             st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC")
             st.session_state['trading_attivo'] = False
         
-        # --- PROTEZIONE WEEKEND ---
-        #giorno_settimana = datetime.now(pytz.timezone('Europe/Rome')).weekday()
-        #if giorno_settimana >= 5:
-            #st.error("🛑 MERCATI CHIUSI. Il trading automatico è disabilitato nel weekend per evitare i mercati OTC.")
-            #st.session_state['trading_attivo'] = False
-            #st.stop() 
-
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
 
         with st.status("🔍 Scansione Sentinel in corso...", expanded=False) as status:
@@ -335,9 +403,22 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 st.write(f"Verifica {asset}...")
                 df = get_data_from_iq(API, asset)
                 
-                # CORREZIONE QUI: spacchettiamo i due valori restituiti
-                signal, stats = check_binary_signal(df)
-                
+                if not df.empty:
+                    # 1. Calcolo indicatori necessari (RSI serve per la divergenza)
+                    df['rsi'] = ta.rsi(df['close'], length=14) 
+    
+                    # 2. INSERISCI QUI LA LOGICA DIVERGENZA
+                    div_status = detect_divergence(df)
+                    if div_status != "NESSUNA" and div_status != "N/A":
+                        last_div_key = f"last_div_{asset}"
+                        if st.session_state.get(last_div_key) != div_status:
+                            msg_div = f"⚠️ *DIVERGENZA RILEVATA su {asset}*\nTipo: {div_status}\nMonitora il grafico per un possibile cambio trend!"
+                            send_telegram_msg(msg_div)
+                            st.session_state[last_div_key] = div_status
+    
+                    # 3. Controllo segnale operativo (quello che avevi già)
+                    signal, stats = check_binary_signal(df)
+                    
                 if signal:
                     # Costruzione del messaggio con i tuoi dati reali
                     telegram_text = (
@@ -483,38 +564,51 @@ else:
     st.info("Connetti l'account per visualizzare il grafico real-time.")
 
 st.markdown("---")
-# --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
+# --- METRICHE DINAMICHE AGGIORNATE ---
 st.subheader(f"🔍 Indicatori in tempo reale")
 
-if not df_rt.empty:
+# Usiamo p_df (gli ultimi 60 min) o df_rt per le metriche
+if 'df_rt' in locals() and not df_rt.empty:
+    # Calcolo ADX al volo se non presente nel DataFrame del grafico
+    if 'adx' not in df_rt.columns:
+        adx_df = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
+        df_rt['adx'] = adx_df['ADX_14']
+
     c1, c2, c3, c4 = st.columns(4)
 
-    # Estrazione valori sicura
+    # Estrazione valori (usiamo .get per evitare errori se le colonne mancano)
     curr_p = df_rt['close'].iloc[-1]
     curr_rsi = df_rt['rsi'].iloc[-1]
     curr_adx = df_rt['adx'].iloc[-1]
+    
+    # Recupero nomi colonne BB corretti
+    c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
+    c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
     bb_upper = df_rt[c_up].iloc[-1]
     bb_lower = df_rt[c_low].iloc[-1]
 
-    # Visualizzazione Metriche
+    # 1. Prezzo
     c1.metric("Prezzo Attuale", f"{curr_p:.5f}")
 
-    c2.metric("RSI (7)", f"{curr_rsi:.2f}", 
-              delta="IPER-COMPRATO" if curr_rsi > 75 else "IPER-VENDUTO" if curr_rsi < 25 else "NEUTRO",
-              delta_color="inverse" if curr_rsi > 75 or curr_rsi < 25 else "normal")
+    # 2. RSI (aggiornato a 14 periodi per coerenza col grafico)
+    c2.metric("RSI (14)", f"{curr_rsi:.2f}", 
+              delta="IPER-COMPRATO" if curr_rsi > 70 else "IPER-VENDUTO" if curr_rsi < 30 else "NEUTRO",
+              delta_color="inverse" if curr_rsi > 70 or curr_rsi < 30 else "normal")
 
+    # 3. ADX
     c3.metric("ADX (14)", f"{curr_adx:.2f}", 
               delta="VOLATILITÀ OK" if 15 < curr_adx < 35 else "SCONSIGLIATO",
               delta_color="normal" if 15 < curr_adx < 35 else "inverse")
 
-    # Distanza dalle Bande
-    dist_up = bb_upper - curr_p
-    dist_low = curr_p - bb_lower
-    min_dist = min(abs(dist_up), abs(dist_low))
-    c4.metric("Distanza BB", f"{min_dist:.5f}", 
-              delta="TOCCATA" if dist_up <= 0 or dist_low <= 0 else "IN RANGE")
+    # 4. Divergenza & Distanza BB
+    div_status = detect_divergence(df_rt)
+    c4.metric("Divergenza RSI", div_status, 
+              delta="TOCCATA BB" if curr_p >= bb_upper or curr_p <= bb_lower else "IN RANGE")
+    
+    # Caption per info extra
+    st.caption(f"📢 Analisi Sentiment: {div_status} | Trend EMA200: {'UP' if curr_p > df_rt['close'].mean() else 'DOWN'}")
 else:
-    st.info("In attesa della connessione...")
+    st.info("In attesa di dati dal grafico...")
 
 # --- CURRENCY STRENGTH ---
 st.markdown("---")
