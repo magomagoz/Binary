@@ -81,14 +81,14 @@ def get_session_status():
             "Tokyo 🇯🇵": False,
             "Londra 🇬🇧": False,
             "New York 🇺🇸": False,
-            "Weekend": False # Segnale extra per il sistema
+            "Siamo nel Weekend ": False # Segnale extra per il sistema
         }
     
     return {
         "Tokyo 🇯🇵": 1 <= ora_roma < 8,
         "Londra 🇬🇧": 9 <= ora_roma < 18,
         "New York 🇺🇸": 15 <= ora_roma < 22,
-        "Weekend": True
+        #"Weekend": True
     }
 
 # --- FUNZIONI TECNICHE IQ OPTION ---
@@ -244,7 +244,7 @@ st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di mercato")
 for s_name, is_open in get_session_status().items():
     color = "🟢" if is_open else "🔴"
-    st.sidebar.markdown(f"**{s_name}**: {'Open' if is_open else 'Closed'} {color}")
+    st.sidebar.markdown(f"**{s_name}**: {'Aperto' if is_open else 'Chiuso'} {color}")
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
