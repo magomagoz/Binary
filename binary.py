@@ -86,13 +86,15 @@ def get_session_status():
             "Tokyo 🇯🇵": False,
             "Londra 🇬🇧": False,
             "New York 🇺🇸": False,
+            "Sidney 🇦🇺": False
             "Mercati": "CHIUSI 🔴"
         }
-    
+
     status = {
-        "Tokyo 🇯🇵": 1 <= ora_roma < 7:30,
-        "Londra 🇬🇧": 9 <= ora_roma < 17:30,
-        "New York 🇺🇸": 15:30 <= ora_roma < 22,
+        "Tokyo 🇯🇵": 0 <= ora_roma < 10,
+        "Londra 🇬🇧": 9 <= ora_roma < 18,
+        "New York 🇺🇸": 14 <= ora_roma < 23,
+        "Sidney 🇦🇺": 23 <= ora_roma < 8
     }
     
     # Aggiunta info Overlap per l'utente
@@ -109,14 +111,14 @@ def check_market_alerts():
     
     # Definiamo gli orari di apertura e chiusura
     alerts = {
-        "01:00": "🇯🇵 Apertura Borsa di TOKYO",
-        "03:30": "🇯🇵 Chiusura Borsa di TOKYO",
-        "04:30": "🇯🇵 Chiusura Borsa di TOKYO",
-        "07:30": "🇯🇵 Chiusura Borsa di TOKYO",
+        "00:00": "🇯🇵 Apertura Borsa di TOKYO",
+        "08:00": "🇯🇵 Chiusura Borsa di TOKYO",
         "09:00": "🇬🇧 Apertura Borsa di LONDRA",
-        "15:30": "🇺🇸 Apertura Borsa di NEW YORK",
-        "17:30": "🇬🇧 Chiusura Borsa di LONDRA",
-        "22:00": "🇺🇸 Chiusura Borsa di NEW YORK"
+        "14:00": "🇺🇸 Apertura Borsa di NEW YORK",
+        "18:00": "🇬🇧 Chiusura Borsa di LONDRA",
+        "23:00": "🇺🇸 Chiusura Borsa di NEW YORK"
+        "23:00": "🇺🇸 Apertura Borsa di SIDNEY"
+        "08:00": "🇺🇸 Chiusura Borsa di SIDNEY"
     }
     
     if current_time in alerts:
