@@ -47,7 +47,7 @@ if 'iq_api' not in st.session_state: st.session_state['iq_api'] = None
 if 'trades' not in st.session_state: st.session_state['trades'] = []
 if 'daily_pnl' not in st.session_state: st.session_state['daily_pnl'] = 0.0
 if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] = False
-    check_market_alerts()
+check_market_alerts()
 if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
