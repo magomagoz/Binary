@@ -24,21 +24,22 @@ except:
 
 def send_telegram_msg(message):
     try:
-        token = st.secrets["TELEGRAM_TOKEN"]
-        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        # Usa direttamente le variabili caricate dai secrets all'inizio
+        url = f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage"
         payload = {
-            "chat_id": chat_id, 
+            "chat_id": TELE_CHAT_ID, 
             "text": message, 
             "parse_mode": "Markdown"
         }
         response = requests.post(url, json=payload, timeout=5)
         if not response.ok:
-            st.error(f"Errore API Telegram: {response.text}")
+            st.sidebar.error(f"Errore Telegram: {response.text}")
+        else:
+            st.write(f"📲 Telegram Log: {message}")       
+    
     except Exception as e:
-        st.error(f"Errore invio: {e}")
-
-# --- CONFIGURAZIONE LOGGING & STATO INIZIALE ---
+        st.sidebar.error(f"Errore connessione Telegram: {e}")
+    
 logging.disable(logging.CRITICAL)
 
 # Inizializzazione rigorosa di TUTTE le variabili di stato per evitare KeyError
@@ -50,6 +51,7 @@ if 'signal_history' not in st.session_state: st.session_state['signal_history'] 
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
 if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
+if 'confirm_real' not in st.session_state: st.session_state['confirm_real'] = False
 
 # --- MAPPA ASSET ---
 asset_map = {
@@ -67,10 +69,6 @@ asset_map = {
 # --- FUNZIONI UTILI ---
 def get_now_rome():
     return datetime.now(pytz.timezone('Europe/Rome'))
-
-def send_telegram_msg(message):
-    # Inserire qui logica requests.post per Telegram
-    st.write(f"📲 Telegram Log: {message}")
 
 def get_session_status():
     dt_roma = datetime.now(pytz.timezone('Europe/Rome'))
