@@ -409,11 +409,17 @@ else:
         st.warning("⚠️ Bot in pausa.")
 
 st.markdown("---")
-st.subheader(f"📈 Grafico con Indicatori (1m)")
+# --- GRAFICO IN TEMPO REALE ---
+st.markdown("---")
+# 1. Recuperiamo la selezione dell'utente
+selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
+pair = asset_map[selected_label] # <--- QUESTA RIGA RISOLVE L'ERRORE
+
+st.subheader(f"📈 Sentinel View: {selected_label} (1m)")
 
 if st.session_state['iq_api']:
     try:
-        # Recupero dati (manteniamo i tuoi 200 periodi per gli indicatori)
+        # Recupero candele reali da IQ Option
         candles_data = st.session_state['iq_api'].get_candles(pair, 60, 200, time_lib.time())
         df_rt = pd.DataFrame(candles_data)
         
@@ -422,45 +428,44 @@ if st.session_state['iq_api']:
             df_rt['time'] = pd.to_datetime(df_rt['time'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Europe/Rome')
             df_rt.set_index('time', inplace=True)
             
-            # Calcolo Indicatori (come nella tua proposta)
+            # Calcolo Indicatori
             bb = ta.bbands(df_rt['close'], length=20, std=2)
             df_rt = pd.concat([df_rt, bb], axis=1)
             df_rt['rsi'] = ta.rsi(df_rt['close'], length=14)
             
+            # Identificazione colonne BB
             c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
             c_mid = [c for c in df_rt.columns if "BBM" in c.upper()][0]
             c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
 
-            # Prendiamo solo gli ultimi 60 minuti per la visualizzazione
+            # Visualizziamo solo gli ultimi 60 minuti
             p_df = df_rt.tail(60)
 
             # --- COSTRUZIONE FIGURA ---
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                 vertical_spacing=0.05, row_heights=[0.75, 0.25])
             
-            # 1. Candele
+            # Candele
             fig.add_trace(go.Candlestick(
                 x=p_df.index, open=p_df['open'], high=p_df['high'], 
                 low=p_df['low'], close=p_df['close'], name='Prezzo'
             ), row=1, col=1)
             
-            # 2. Bande Bollinger con la tua logica di riempimento
+            # Bande di Bollinger con riempimento (BBM inclusa)
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_up], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), name='Upper BB'), row=1, col=1)
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_mid], line=dict(color='rgba(255, 255, 255, 0.2)', width=1, dash='dot'), name='BBM'), row=1, col=1)
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_low], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), fill='tonexty', fillcolor='rgba(0, 191, 255, 0.05)', name='Lower BB'), row=1, col=1)
 
-            # 3. RSI
+            # RSI con soglie colorate
             fig.add_trace(go.Scatter(x=p_df.index, y=p_df['rsi'], line=dict(color='#ffcc00', width=2), name='RSI'), row=2, col=1)
             fig.add_hline(y=70, line_dash="dot", line_color="red", opacity=0.5, row=2, col=1)
             fig.add_hline(y=30, line_dash="dot", line_color="#00ff00", opacity=0.5, row=2, col=1)
 
-            # --- FIX DEFINITIVO GRIGLIA VERTICALE ---
-            # Mostriamo una linea ogni 5 minuti per non affollare troppo
+            # Griglia verticale ogni 5 minuti
             for t in p_df.index:
                 if t.minute % 5 == 0:
                     fig.add_vline(x=t, line_width=0.8, line_dash="solid", line_color="rgba(255, 255, 255, 0.1)", layer="below")
 
-            # Layout Grafico
             fig.update_layout(
                 height=650, 
                 template="plotly_dark", 
@@ -469,15 +474,13 @@ if st.session_state['iq_api']:
                 legend=dict(orientation="h", y=1.02, xanchor="right", x=1)
             )
             
-            fig.update_xaxes(tickformat="%H:%M", dtick=300000) # Tick visibile ogni 5 min
-
             st.plotly_chart(fig, use_container_width=True)
-            
+
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
 
 else:
-    st.info("In attesa della connessione...")
+    st.info("Connetti l'account per visualizzare il grafico real-time.")
 
 st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
