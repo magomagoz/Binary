@@ -80,11 +80,11 @@ def get_session_status():
     ora_gmt = now_gmt.hour + now_gmt.minute / 60
     giorno = now_gmt.weekday() 
 
-    # 1. Controllo Weekend
+    # Controllo Weekend
     if giorno == 5 or (giorno == 4 and ora_gmt >= 22) or (giorno == 6 and ora_gmt < 21):
-        return {"STATO_GLOBALE": "CHIUSI 🔴", "Sidney": False, "Tokyo": False, "Londra": False, "New York": False}
+        return {"STATO": "CHIUSI 🔴", "sessions": {}}
 
-    # 2. Definizione Borse
+    # Definizione Borse
     sessions = {
         "Sidney 🇦🇺": 21 <= ora_gmt or ora_gmt < 6,
         "Tokyo 🇯🇵": 0 <= ora_gmt < 9,
@@ -92,13 +92,13 @@ def get_session_status():
         "New York 🇺🇸": 13 <= ora_gmt < 22,
     }
     
-    # 3. Calcolo Stato Globale
-    if sessions["Londra"] and sessions["New York"]:
-        sessions["STATO_GLOBALE"] = "OVERLAP 🔥"
+    # Calcolo Stato Globale
+    if sessions["Londra 🇬🇧"] and sessions["New York 🇺🇸"]:
+        stato = "OVERLAP 🔥"
     else:
-        sessions["STATO_GLOBALE"] = "APERTO 🟢"
+        stato = "OPERATIVO 🟢"
         
-    return sessions
+    return {"STATO": stato, "sessions": sessions}
 
 def check_market_alerts():
     # Usiamo il fuso orario UTC (GMT)
@@ -323,18 +323,36 @@ else:
         st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("🌍 Sessioni di mercato")
+st.sidebar.subheader("🌍 Sessioni di Mercato")
+
 status_data = get_session_status()
 
-# Mostra prima lo stato generale
-st.sidebar.markdown(f"**Mercati**: {status_data['STATO_GLOBALE']}")
+# --- BLOCCO STATO GENERALE ---
+# Usiamo un box colorato per separarlo visivamente
+st.sidebar.markdown(f"""
+    <div style="background-color: rgba(255, 255, 255, 0.1); 
+                padding: 10px; 
+                border-radius: 10px; 
+                border: 1px solid #444; 
+                text-align: center; 
+                margin-bottom: 15px;">
+        <small style="color: #888; text-transform: uppercase;">Stato Mercato</small><br>
+        <b style="font-size: 1.2em;">{status_data['STATO']}</b>
+    </div>
+""", unsafe_allow_html=True)
 
-# Ciclo solo sulle borse (saltando la chiave STATO_GLOBALE)
-for s_name, is_open in status_data.items():
-    if s_name != "STATO_GLOBALE":
+# --- LISTA BORSE ---
+# Ciclo solo sulle sessioni per non ripetere lo stato generale
+if status_data['sessions']:
+    for s_name, is_open in status_data['sessions'].items():
         icon = "🟢" if is_open else "🔴"
         label = "Aperto" if is_open else "Chiuso"
-        st.sidebar.markdown(f"**{s_name}**: {label} {icon}")
+        # Usiamo le colonne per allineare icone e nomi
+        col1, col2 = st.sidebar.columns([0.8, 0.2])
+        col1.write(f"**{s_name}**")
+        col2.write(icon)
+else:
+    st.sidebar.warning("Mercato chiuso per il Weekend")
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
