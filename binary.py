@@ -81,7 +81,7 @@ def get_session_status():
             "Tokyo 🇯🇵": False,
             "Londra 🇬🇧": False,
             "New York 🇺🇸": False,
-            "Siamo nel Weekend ": False # Segnale extra per il sistema
+            "Siamo nel Weekend": False # Segnale extra per il sistema
         }
     
     return {
@@ -467,24 +467,41 @@ if st.session_state['iq_api']:
             fig.update_yaxes(range=[0, 100], row=2, col=1)
 
             # --- ZOOM 1 ORA E GRIGLIA MINUTI ---
+            # --- CONFIGURAZIONE GRIGLIA MILLIMETRICA ---
             ora_fine = df_rt.index[-1]
             ora_inizio = ora_fine - pd.Timedelta(minutes=60)
 
             fig.update_xaxes(
                 range=[ora_inizio, ora_fine],
                 type="date",
-                dtick=60000, # Un tick ogni minuto (60.000 ms)
-                gridcolor='rgba(255, 255, 255, 0.05)',
+                # Forza un tick ogni minuto (60.000 millisecondi)
+                dtick=60000, 
+                # Formato ora:minuto
                 tickformat="%H:%M",
+                # Ruota i tick se sono troppo vicini (evita che Plotly li nasconda)
+                tickangle=-45,
+                gridcolor='rgba(255, 255, 255, 0.05)',
                 row=1, col=1
             )
 
-            # Righe verticali per ogni minuto (attraversano entrambi i grafici)
+            # Aggiunta linee verticali fisse per ogni minuto su entrambi i grafici
             for t in df_rt.index:
                 if t >= ora_inizio:
-                    fig.add_vline(x=t, line_width=0.5, line_color="rgba(255,255,255,0.1)", row="all")
+                    fig.add_vline(
+                        x=t, 
+                        line_width=0.4, 
+                        line_color="rgba(255,255,255,0.1)", 
+                        row="all"
+                    )
 
-            fig.update_layout(height=700, template="plotly_dark", xaxis_rangeslider_visible=False, showlegend=False)
+            # Impostazioni generali Layout
+            fig.update_layout(
+                height=700, 
+                template="plotly_dark", 
+                xaxis_rangeslider_visible=False, 
+                showlegend=False,
+                margin=dict(l=20, r=20, t=20, b=20)
+            )
             st.plotly_chart(fig, use_container_width=True)
             
     except Exception as e:
