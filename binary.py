@@ -362,7 +362,7 @@ st.image("banner.png", use_container_width=True)
 
 if st.session_state['iq_api']:
     acc_type = st.session_state['iq_api'].get_balance_mode()
-    color = "blue" if acc_type == "PRACTICE" else "red"
+    color = "light blue" if acc_type == "PRACTICE" else "red"
     st.markdown(f"""
         <div style="background-color: {color}; padding: 5px; border-radius: 5px; text-align: center; color: white; font-weight: bold;">
             MODALITÀ ATTUALE: {acc_type}
@@ -458,7 +458,6 @@ else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
 
-st.markdown("---")
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
 # 1. Recuperiamo la selezione dell'utente
