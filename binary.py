@@ -24,14 +24,19 @@ except:
 
 def send_telegram_msg(message):
     try:
-        # Recupera token e ID dai secrets
         token = st.secrets["TELEGRAM_TOKEN"]
         chat_id = st.secrets["TELEGRAM_CHAT_ID"]
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
-        requests.post(url, json=payload, timeout=5)
+        payload = {
+            "chat_id": chat_id, 
+            "text": message, 
+            "parse_mode": "Markdown"
+        }
+        response = requests.post(url, json=payload, timeout=5)
+        if not response.ok:
+            st.error(f"Errore API Telegram: {response.text}")
     except Exception as e:
-        st.error(f"Errore invio Telegram: {e}")
+        st.error(f"Errore invio: {e}")
 
 # --- CONFIGURAZIONE LOGGING & STATO INIZIALE ---
 logging.disable(logging.CRITICAL)
@@ -175,13 +180,13 @@ def check_binary_signal(df):
     return None, stats
 
 # --- SIDEBAR: ACCESSO E CONFIGURAZIONE ---
-st.sidebar.title("🔐 Sentinel AI Access")
+st.sidebar.title("🔐 IQ Option Access")
 
 if st.session_state['iq_api'] is None:
     st.sidebar.error("🔴 STATO: DISCONNESSO")
     user_mail = st.sidebar.text_input("Email IQ", value=IQ_EMAIL)
     user_pass = st.sidebar.text_input("Password IQ", type="password", value=IQ_PASS)
-    if st.sidebar.button("🔌 Connetti CONTO PRACTICE", use_container_width=True):
+    if st.sidebar.button("🔌 Connetti CONTO PRACTICE 🟢", use_container_width=True):
         api = IQ_Option(user_mail, user_pass)
         check, reason = api.connect()
         if check:
@@ -189,10 +194,32 @@ if st.session_state['iq_api'] is None:
             st.session_state['iq_api'] = api
             st.session_state['trading_attivo'] = True
             st.rerun()
-        else:
-            st.sidebar.error(f"Errore: {reason}")
+                    
 else:
     st.sidebar.success("🟢 STATO: IN LINEA")
+    API = st.session_state['iq_api']
+    
+    # --- LOGICA SWITCH CONTO ---
+    col_p, col_r = st.sidebar.columns(2)
+    
+    if col_p.button("🎮 PRACTICE", use_container_width=True):
+        API.change_balance("PRACTICE")
+        st.toast("Passato a Conto Practice", icon="🎮")
+        
+    if col_r.button("💰 REALE", use_container_width=True, type="primary"):
+        API.change_balance("REAL")
+        st.toast("ATTENZIONE: Passato a Conto REALE", icon="⚠️")
+
+    # --- LETTURA SALDO ---
+    # L'API di IQ Option restituisce il saldo del conto attualmente attivo
+    current_balance = API.get_balance()
+    account_type = API.get_balance_mode() # Ritorna 'PRACTICE' o 'REAL'
+    
+    st.sidebar.metric(
+        label=f"Saldo attuale ({account_type})", 
+        value=f"€ {current_balance:,.2f}"
+    )
+
     if st.sidebar.button("🚪 Esci e Ferma Bot", use_container_width=True):
         st.session_state['iq_api'] = None
         st.session_state['trading_attivo'] = False
@@ -214,6 +241,10 @@ st.sidebar.divider()
 st.sidebar.subheader("🧪 Modalità Test")
 paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
 
+# Forza la simulazione se il saldo è REAL ma l'utente ha dimenticato il toggle su ON
+if not paper_trading and account_type == "REAL":
+    st.sidebar.warning("⚡ OPERATIVITÀ REALE ATTIVA")
+
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
 if st.session_state['trading_attivo']:
@@ -228,7 +259,8 @@ else:
 # Da inserire in st.sidebar per un test rapido
 st.sidebar.markdown("---")
 if st.sidebar.button("🧪 Test Telegram"):
-    send_telegram_msg("✅ Sentinel AI: Sistema pronto per la riapertura di Lunedì!")
+    send_telegram_msg("🔔 *Sentinel AI Test*\nConnessione riuscita con successo!")
+    
     st.sidebar.success("Messaggio inviato!")
 
 # Reset Sidebar
@@ -244,6 +276,16 @@ with st.sidebar.popover("🗑️ **Reset Cronologia**"):
 # --- MAIN INTERFACE ---
 st.image("banner.png", use_container_width=True)
 #st.title("🛰️ Sentinel AI - Binary Execution")
+
+if st.session_state['iq_api']:
+    acc_type = st.session_state['iq_api'].get_balance_mode()
+    color = "blue" if acc_type == "PRACTICE" else "red"
+    st.markdown(f"""
+        <div style="background-color: {color}; padding: 5px; border-radius: 5px; text-align: center; color: white; font-weight: bold;">
+            MODALITÀ ATTUALE: {acc_type}
+        </div>
+    """, unsafe_allow_html=True)
+
 
 # Logica Autorun
 if st.session_state['iq_api'] and st.session_state['trading_attivo']:
@@ -282,6 +324,17 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 signal, stats = check_binary_signal(df)
                 
                 if signal:
+                    # Costruzione del messaggio con i tuoi dati reali
+                    telegram_text = (
+                        f"🚀 *NUOVO SEGNALE: {signal}*\n"
+                        f"📈 Asset: {asset}\n"
+                        f"💰 Entrata: {stats['Price']}\n"
+                        f"🎯 RSI: {stats['RSI']}\n"
+                        f"🛡️ ADX: {stats['ADX']}\n"
+                        f"______________________"
+                        f"💳 Investimento: {stake}€"
+                    )
+                    send_telegram_msg(telegram_text)
                     
                     if paper_trading:
                         # Suono leggero (Ping) per la Simulazione
