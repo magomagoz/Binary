@@ -78,23 +78,32 @@ def get_now_rome():
 def get_session_status():
     dt_roma = datetime.now(pytz.timezone('Europe/Rome'))
     ora_roma = dt_roma.hour
-    giorno_settimana = dt_roma.weekday() # 5 = Sabato, 6 = Domenica
+    giorno_settimana = dt_roma.weekday() # 0=Lun, 4=Ven, 5=Sab, 6=Dom
 
-    # Se è Sabato o Domenica, i mercati reali sono chiusi
-    if giorno_settimana >= 5:
+    # Se è Sabato o Domenica (fino alle 22:00), i mercati reali sono chiusi
+    if giorno_settimana == 5 or (giorno_settimana == 6 and ora_roma < 22):
         return {
+            "Sidney 🇦🇺": False,
             "Tokyo 🇯🇵": False,
             "Londra 🇬🇧": False,
             "New York 🇺🇸": False,
-            "Siamo nel Weekend": False # Segnale extra per il sistema
+            "Mercati": "CHIUSI 🔴"
         }
     
-    return {
-        "Tokyo 🇯🇵": 1 <= ora_roma < 8,
+    status = {
+        "Sidney 🇦🇺": 22 <= ora_roma or ora_roma < 7,
+        "Tokyo 🇯🇵": 1 <= ora_roma < 10,
         "Londra 🇬🇧": 9 <= ora_roma < 18,
         "New York 🇺🇸": 15 <= ora_roma < 22,
-        #"Weekend": True
     }
+    
+    # Aggiunta info Overlap per l'utente
+    if status["Londra 🇬🇧"] and status["New York 🇺🇸"]:
+        status["MERCATO"] = "OVERLAP 🔥"
+    else:
+        status["MERCATO"] = "OPERATIVO 🟢"
+        
+    return status
 
 def check_market_alerts():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -103,10 +112,12 @@ def check_market_alerts():
     # Definiamo gli orari di apertura e chiusura
     alerts = {
         "01:00": "🇯🇵 Apertura Borsa di TOKYO",
-        "08:00": "🇯🇵 Chiusura Borsa di TOKYO",
+        "03:30": "🇯🇵 Chiusura Borsa di TOKYO",
+        "04:30": "🇯🇵 Chiusura Borsa di TOKYO",
+        "07:30": "🇯🇵 Chiusura Borsa di TOKYO",
         "09:00": "🇬🇧 Apertura Borsa di LONDRA",
         "15:30": "🇺🇸 Apertura Borsa di NEW YORK",
-        "18:00": "🇬🇧 Chiusura Borsa di LONDRA",
+        "17:30": "🇬🇧 Chiusura Borsa di LONDRA",
         "22:00": "🇺🇸 Chiusura Borsa di NEW YORK"
     }
     
