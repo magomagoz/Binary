@@ -75,56 +75,58 @@ asset_map = {
 def get_now_rome():
     return datetime.now(pytz.timezone('Europe/Rome'))
 
+#ultima
 def get_session_status():
-    dt_roma = datetime.now(pytz.timezone('Europe/Rome'))
-    ora_roma = dt_roma.hour
-    giorno_settimana = dt_roma.weekday() # 0=Lun, 4=Ven, 5=Sab, 6=Dom
+    # Otteniamo l'ora attuale in UTC/GMT
+    now_gmt = datetime.now(pytz.utc)
+    ora_gmt = now_gmt.hour + now_gmt.minute / 60
+    giorno = now_gmt.weekday() # 0=Lunedì, 6=Domenica
 
-    # Se è Sabato o Domenica (fino alle 22:00), i mercati reali sono chiusi
-    if giorno_settimana == 5 or (giorno_settimana == 6 and ora_roma < 22):
-        return {
-            "Tokyo 🇯🇵": False,
-            "Londra 🇬🇧": False,
-            "New York 🇺🇸": False,
-            "Sidney 🇦🇺": False
-            "Mercati": "CHIUSI 🔴"
-        }
+    # Mercato chiuso: dal Venerdì ore 22:00 GMT alla Domenica ore 21:00 GMT
+    if giorno == 5 or (giorno == 4 and ora_gmt >= 22) or (giorno == 6 and ora_gmt < 21):
+        return {"Mercati": "CHIUSI 🔴", "Sidney": False, "Tokyo": False, "Londra": False, "New York": False}
 
     status = {
-        "Tokyo 🇯🇵": 0 <= ora_roma < 10,
-        "Londra 🇬🇧": 9 <= ora_roma < 18,
-        "New York 🇺🇸": 14 <= ora_roma < 23,
-        "Sidney 🇦🇺": 23 <= ora_roma < 8
+        "Sidney 🇦🇺": 21 <= ora_gmt or ora_gmt < 6,
+        "Tokyo 🇯🇵": 0 <= ora_gmt < 9,
+        "Londra 🇬🇧": 8 <= ora_gmt < 17,
+        "New York 🇺🇸": 13 <= ora_gmt < 22,
     }
     
-    # Aggiunta info Overlap per l'utente
-    if status["Londra 🇬🇧"] and status["New York 🇺🇸"]:
-        status["MERCATO"] = "OVERLAP 🔥"
-    else:
-        status["MERCATO"] = "OPERATIVO 🟢"
-        
+    # Rilevamento Overlap "Golden" (Londra + NY)
+    status["MERCATO"] = "OVERLAP 🔥" if (status["Londra 🇬🇧"] and status["New York 🇺🇸"]) else "OPERATIVO 🟢"
+    
     return status
 
 def check_market_alerts():
-    now = datetime.now(pytz.timezone('Europe/Rome'))
-    current_time = now.strftime("%H:%M")
+    # Usiamo il fuso orario UTC (GMT)
+    now_gmt = datetime.now(pytz.utc)
+    current_time = now_gmt.strftime("%H:%M")
     
-    # Definiamo gli orari di apertura e chiusura
+    # Orari ufficiali in GMT
     alerts = {
-        "00:00": "🇯🇵 Apertura Borsa di TOKYO",
-        "08:00": "🇯🇵 Chiusura Borsa di TOKYO",
-        "09:00": "🇬🇧 Apertura Borsa di LONDRA",
-        "14:00": "🇺🇸 Apertura Borsa di NEW YORK",
-        "18:00": "🇬🇧 Chiusura Borsa di LONDRA",
-        "23:00": "🇺🇸 Chiusura Borsa di NEW YORK"
-        "23:00": "🇺🇸 Apertura Borsa di SIDNEY"
-        "08:00": "🇺🇸 Chiusura Borsa di SIDNEY"
+        "00:00": "🇯🇵 Apertura Sessione TOKYO",
+        "06:00": "🇦🇺 Chiusura Sessione SIDNEY",
+        "08:00": "🇬🇧 Apertura Sessione LONDRA",
+        "09:00": "🇯🇵 Chiusura Sessione TOKYO",
+        "13:00": "🇺🇸 Apertura Sessione NEW YORK", # 13:00 GMT = 14:00/15:00 Roma
+        "17:00": "🇬🇧 Chiusura Sessione LONDRA",
+        "21:00": "🇦🇺 Apertura Sessione SIDNEY",
+        "22:00": "🇺🇸 Chiusura Sessione NEW YORK"
     }
     
     if current_time in alerts:
-        # Usiamo il session_state per non inviare il messaggio 60 volte nello stesso minuto
+        # Controllo per evitare invii multipli nello stesso minuto
         if st.session_state.get("last_market_alert") != current_time:
-            msg = f"🔔 *MARKET UPDATE*\n{alerts[current_time]}"
+            # 1. Calcoliamo l'ora locale per il messaggio
+            ora_roma = datetime.now(pytz.timezone('Europe/Rome')).strftime("%H:%M")
+            
+            # 2. Componiamo il messaggio unico
+            msg = (f"🔔 *MARKET UPDATE (GMT: {current_time})*\n"
+                   f"{alerts[current_time]}\n"
+                   f"🇮🇹 Ora locale Roma: {ora_roma}")
+            
+            # 3. Invio e salvataggio stato
             send_telegram_msg(msg)
             st.session_state["last_market_alert"] = current_time
 
