@@ -408,100 +408,69 @@ else:
     else:
         st.warning("⚠️ Bot in pausa.")
 
-# --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
 st.subheader(f"📈 Grafico con Indicatori (1m)")
-selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
-pair = asset_map[selected_label]
-
-# Inizializziamo df_rt come vuoto per evitare errori di definizione
-df_rt = pd.DataFrame()
 
 if st.session_state['iq_api']:
     try:
+        # Recupero dati (manteniamo i tuoi 200 periodi per gli indicatori)
         candles_data = st.session_state['iq_api'].get_candles(pair, 60, 200, time_lib.time())
         df_rt = pd.DataFrame(candles_data)
+        
         if not df_rt.empty:
             df_rt.rename(columns={'max': 'high', 'min': 'low', 'open': 'open', 'close': 'close', 'from': 'time'}, inplace=True)
             df_rt['time'] = pd.to_datetime(df_rt['time'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Europe/Rome')
             df_rt.set_index('time', inplace=True)
             
-            # Assicurati di calcolare l'ADX anche qui per le metriche visive
-            adx_vis = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
-            df_rt['adx'] = adx_vis['ADX_14']
-            
-            # --- CALCOLO INDICATORI PER IL GRAFICO ---
-            # Bollinger (20, 2.2)
-            bb = ta.bbands(df_rt['close'], length=20, std=2.2)
+            # Calcolo Indicatori (come nella tua proposta)
+            bb = ta.bbands(df_rt['close'], length=20, std=2)
             df_rt = pd.concat([df_rt, bb], axis=1)
+            df_rt['rsi'] = ta.rsi(df_rt['close'], length=14)
+            
             c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
             c_mid = [c for c in df_rt.columns if "BBM" in c.upper()][0]
             c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
-            
-            # RSI (7)
-            df_rt['rsi'] = ta.rsi(df_rt['close'], length=7)
 
-            # --- CREAZIONE FIGURA ---
+            # Prendiamo solo gli ultimi 60 minuti per la visualizzazione
+            p_df = df_rt.tail(60)
+
+            # --- COSTRUZIONE FIGURA ---
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                row_heights=[0.7, 0.3], vertical_spacing=0.05)
+                                vertical_spacing=0.05, row_heights=[0.75, 0.25])
             
             # 1. Candele
-            fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], 
-                                         low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
+            fig.add_trace(go.Candlestick(
+                x=p_df.index, open=p_df['open'], high=p_df['high'], 
+                low=p_df['low'], close=p_df['close'], name='Prezzo'
+            ), row=1, col=1)
             
-            # 2. Bande di Bollinger
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.4)', width=1), name='BBU'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_mid], line=dict(color='rgba(255, 255, 255, 0.3)', dash='dash', width=1), name='BBM'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.4)', width=1), name='BBL'), row=1, col=1)
-            
-            # Riempimento tenue tra BBM e BBL
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], fill='tonexty', 
-                                     fillcolor='rgba(173, 216, 230, 0.05)', line=dict(width=0), showlegend=False), row=1, col=1)
-            
-            # 3. RSI con Soglie
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='#00ffcc', width=2), name='RSI'), row=2, col=1)
-            
-            # Linee Orizzontali RSI (70 Overbought, 30 Oversold)
-            fig.add_hline(y=70, line_dash="dash", line_color="red", line_width=1, row=2, col=1)
-            fig.add_hline(y=30, line_dash="dash", line_color="lime", line_width=1, row=2, col=1)
-            fig.update_yaxes(range=[0, 100], row=2, col=1)
+            # 2. Bande Bollinger con la tua logica di riempimento
+            fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_up], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), name='Upper BB'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_mid], line=dict(color='rgba(255, 255, 255, 0.2)', width=1, dash='dot'), name='BBM'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=p_df.index, y=p_df[c_low], line=dict(color='rgba(0, 191, 255, 0.3)', width=1), fill='tonexty', fillcolor='rgba(0, 191, 255, 0.05)', name='Lower BB'), row=1, col=1)
 
-            # --- ZOOM 1 ORA E GRIGLIA MINUTI ---
-            # --- CONFIGURAZIONE GRIGLIA MILLIMETRICA ---
-            ora_fine = df_rt.index[-1]
-            ora_inizio = ora_fine - pd.Timedelta(minutes=60)
+            # 3. RSI
+            fig.add_trace(go.Scatter(x=p_df.index, y=p_df['rsi'], line=dict(color='#ffcc00', width=2), name='RSI'), row=2, col=1)
+            fig.add_hline(y=70, line_dash="dot", line_color="red", opacity=0.5, row=2, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="#00ff00", opacity=0.5, row=2, col=1)
 
-            fig.update_xaxes(
-                range=[ora_inizio, ora_fine],
-                type="date",
-                # Forza un tick ogni minuto (60.000 millisecondi)
-                dtick=60000, 
-                # Formato ora:minuto
-                tickformat="%H:%M",
-                # Ruota i tick se sono troppo vicini (evita che Plotly li nasconda)
-                tickangle=-45,
-                gridcolor='rgba(255, 255, 255, 0.05)',
-                row=1, col=1
-            )
+            # --- FIX DEFINITIVO GRIGLIA VERTICALE ---
+            # Mostriamo una linea ogni 5 minuti per non affollare troppo
+            for t in p_df.index:
+                if t.minute % 5 == 0:
+                    fig.add_vline(x=t, line_width=0.8, line_dash="solid", line_color="rgba(255, 255, 255, 0.1)", layer="below")
 
-            # Aggiunta linee verticali fisse per ogni minuto su entrambi i grafici
-            for t in df_rt.index:
-                if t >= ora_inizio:
-                    fig.add_vline(
-                        x=t, 
-                        line_width=0.4, 
-                        line_color="rgba(255,255,255,0.1)", 
-                        row="all"
-                    )
-
-            # Impostazioni generali Layout
+            # Layout Grafico
             fig.update_layout(
-                height=700, 
+                height=650, 
                 template="plotly_dark", 
                 xaxis_rangeslider_visible=False, 
-                showlegend=False,
-                margin=dict(l=20, r=20, t=20, b=20)
+                margin=dict(l=10, r=10, t=30, b=10),
+                legend=dict(orientation="h", y=1.02, xanchor="right", x=1)
             )
+            
+            fig.update_xaxes(tickformat="%H:%M", dtick=300000) # Tick visibile ogni 5 min
+
             st.plotly_chart(fig, use_container_width=True)
             
     except Exception as e:
