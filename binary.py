@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import pandas_ta as ta
@@ -11,17 +10,6 @@ import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-def send_telegram_msg(message):
-    try:
-        # Recupera token e ID dai secrets
-        token = st.secrets["TELEGRAM_TOKEN"]
-        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
-        requests.post(url, json=payload, timeout=5)
-    except Exception as e:
-        st.error(f"Errore invio Telegram: {e}")
-
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
 
@@ -33,6 +21,17 @@ try:
     TELE_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 except:
     st.error("Configura correttamente st.secrets!")
+
+def send_telegram_msg(message):
+    try:
+        # Recupera token e ID dai secrets
+        token = st.secrets["TELEGRAM_TOKEN"]
+        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        st.error(f"Errore invio Telegram: {e}")
 
 # --- CONFIGURAZIONE LOGGING & STATO INIZIALE ---
 logging.disable(logging.CRITICAL)
@@ -182,7 +181,7 @@ if st.session_state['iq_api'] is None:
     st.sidebar.error("🔴 STATO: DISCONNESSO")
     user_mail = st.sidebar.text_input("Email IQ", value=IQ_EMAIL)
     user_pass = st.sidebar.text_input("Password IQ", type="password", value=IQ_PASS)
-    if st.sidebar.button("🔌 Connetti Practice", use_container_width=True):
+    if st.sidebar.button("🔌 Connetti CONTO PRACTICE, use_container_width=True):
         api = IQ_Option(user_mail, user_pass)
         check, reason = api.connect()
         if check:
@@ -200,10 +199,20 @@ else:
         st.rerun()
 
 st.sidebar.divider()
+st.sidebar.subheader("🌍 Sessioni di mercato")
+for s_name, is_open in get_session_status().items():
+    color = "🟢" if is_open else "🔴"
+    st.sidebar.markdown(f"**{s_name}**: {'Open' if is_open else 'Closed'} {color}")
+
+st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
 stake = st.sidebar.number_input("Stake Singolo (€)", value=20.0)
 target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
+
+st.sidebar.divider()
+st.sidebar.subheader("🧪 Modalità Test")
+paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -215,17 +224,6 @@ else:
     if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
         st.session_state['trading_attivo'] = True
         st.rerun()
-
-st.sidebar.divider()
-st.sidebar.subheader("🧪 Modalità Test")
-paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
-
-
-st.sidebar.divider()
-st.sidebar.subheader("🌍 Sessioni di mercato")
-for s_name, is_open in get_session_status().items():
-    color = "🟢" if is_open else "🔴"
-    st.sidebar.markdown(f"**{s_name}**: {'Open' if is_open else 'Closed'} {color}")
 
 # Da inserire in st.sidebar per un test rapido
 st.sidebar.markdown("---")
@@ -344,7 +342,7 @@ else:
 
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
-st.subheader(f"📈 Grafico con Indicatori Sentinel (1m)")
+st.subheader(f"📈 Grafico con Indicatori (1m)")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label]
 
@@ -438,8 +436,9 @@ if st.session_state['iq_api']:
 
 st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
+st.warning(f"🔍 Sentinel Real-Time Oscillators")
+
 if not df_rt.empty:
-    st.markdown("### 🔍 Sentinel Real-Time Oscillators")
     c1, c2, c3, c4 = st.columns(4)
 
     # Estrazione valori sicura
@@ -482,6 +481,8 @@ if st.session_state['iq_api']:
 
 # --- REPORTING ---
 st.divider()
+st.subheader(f"📊 Analisi Operativa")
+
 col_res1, col_res2 = st.columns(2)
 with col_res1:
     st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
