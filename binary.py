@@ -264,9 +264,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         if is_weekend:
             st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC.")
             st.session_state['trading_attivo'] = False
-            # Rimuovi st.stop() se vuoi comunque vedere il grafico, 
-            # oppure lascialo se vuoi bloccare tutto.
-
+        
         # --- PROTEZIONE WEEKEND ---
         #giorno_settimana = datetime.now(pytz.timezone('Europe/Rome')).weekday()
         #if giorno_settimana >= 5:
@@ -342,16 +340,6 @@ else:
         st.info("👋 Effettua il login per attivare il sistema.")
     else:
         st.warning("⚠️ Bot in pausa.")
-
-        # Controllo Weekend
-        status_mercati = get_session_status()
-        is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
-        
-if is_weekend:
-    st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC.")
-    st.session_state['trading_attivo'] = False
-    st.stop() # Ferma l'esecuzione qui
-
 
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
