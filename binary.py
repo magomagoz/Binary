@@ -454,6 +454,9 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                                     st.rerun()
                         else:
                             st.write(f"⏭️ {asset}: Segnale presente ma Forza Valuta non valida.")
+else:
+    if not st.session_state['iq_api']:
+        st.info("Effettua il login per attivare il sistema.")
 
 st.markdown("---")
 # --- GRAFICO IN TEMPO REALE ---
