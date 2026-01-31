@@ -561,7 +561,7 @@ if st.session_state['iq_api']:
                 template="plotly_dark", 
                 xaxis_rangeslider_visible=False, 
                 margin=dict(l=10, r=10, t=30, b=10),
-                legend=dict(orientation="h", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.5)")
+                legend=dict(orientation="h", yanchor="top", y=1.02, xanchor="left", x=0.01, bgcolor="rgba(180,180,180,0.3)")
             )
             
             st.plotly_chart(fig, use_container_width=True)
