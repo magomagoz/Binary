@@ -222,15 +222,15 @@ def send_daily_report():
             if not trades:
                 msg = "📊 *REPORT GIORNALIERO SENTINEL*\nNessuna operazione effettuata oggi."
             else:
-                df = pd.DataFrame(trades)
-                wins = len(df[df['Esito'] == 'WIN'])
-                losses = len(df[df['Esito'] == 'LOSS'])
-                win_rate = (wins / len(df)) * 100
-                pnl_tot = df['Profitto'].sum()
-                msg = (f"📊 *REPORT GIORNALIERO SENTINEL*\n📅 Data: {now.date()}\n\n"
+                df_rep = pd.DataFrame(trades)
+                wins = len(df_rep[df_rep['Esito'] == 'WIN'])
+                losses = len(df_rep[df_rep['Esito'] == 'LOSS'])
+                win_rate = (wins / len(df_rep)) * 100
+                pnl_tot = df_rep['Profitto'].sum()
+                msg = (f"📊 *REPORT GIORNALIERO SENTINEL*\n"
                        f"✅ Vinte: {wins} | ❌ Perse: {losses}\n"
                        f"📈 Win Rate: {win_rate:.1f}%\n"
-                       f"💰 *Profitto Totale: € {pnl_tot:.2f}*")
+                       f"💰 *Profitto: € {pnl_tot:.2f}*")
             send_telegram_msg(msg)
             st.session_state["last_daily_report_date"] = now.date()
 
@@ -445,12 +445,11 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         
         with st.status("🔍 Scansione Sentinel in corso...", expanded=False) as status:
             for asset in assets_to_scan:
-                st.write(f"Verifica {asset}...")
                 df = get_data_from_iq(API, asset)
                 if not df.empty:
                     df['rsi'] = ta.rsi(df['close'], length=14) 
                     
-                    # 1. Divergenza
+                    # 1. Divergenza (Informativa)
                     div_status = detect_divergence(df)
                     if div_status != "NESSUNA" and div_status != "N/A":
                         last_div_key = f"last_div_{asset}"
@@ -458,13 +457,13 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
                             st.session_state[last_div_key] = div_status
     
-                    # 2. Segnale Operativo
+                    # 2. Segnale Operativo Tecnico
                     signal, stats = check_binary_signal(df)
                     
                     if signal:
-                        # 3. Filtro Forza Valuta
+                        # 3. FILTRO FORZA VALUTA (Esecutivo)
                         if is_strength_valid(asset, currency_strength, threshold=0.15):
-                            telegram_text = (f"🚀 *NUOVO SEGNALE: {signal}*\n📈 Asset: {asset}\n"
+                            telegram_text = (f"🚀 *SEGNALE VALIDATO: {signal}*\n📈 Asset: {asset}\n"
                                              f"💰 Prezzo: {stats['Price']}\n🎯 RSI: {stats['RSI']}")
                             send_telegram_msg(telegram_text)
                     
@@ -477,54 +476,37 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                         st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
                         st.warning(f"🔥 SEGNALE REALE: {signal} su {asset}!")
 
-                    if paper_trading:
-                        # --- LOGICA SIMULAZIONE (già corretta prima) ---
-                        st.info(f"🧪 [SIMULAZIONE] Analisi esito per {asset}...")
-                        time_lib.sleep(60) 
-                        
-                        df_post = get_data_from_iq(API, asset)
-                        if not df_post.empty:
-                            price_end = df_post['close'].iloc[-1]
-                            price_start = stats["Price"]
-                            sim_win = price_end > price_start if signal == "CALL" else price_end < price_start
-                            
-                            res = (stake * 0.85) if sim_win else -stake 
-                            
-                            st.session_state['trades'].append({
-                                "Ora": get_now_rome().strftime("%H:%M:%S"),
-                                "Asset": asset,
-                                "Tipo": f"SIM-{signal}",
-                                "Esito": "WIN" if sim_win else "LOSS",
-                                "Profitto": res,
-                                "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
-                                "ATR": stats["ATR"], "Trend": stats["Trend"]
-                            })
-                            # Usiamo una variabile di stato dedicata per il profitto simulato
-                            if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
-                            st.session_state['sim_pnl'] += res
-                            st.rerun()
-                    else:
-                        # --- LOGICA REALE ---
-                        check, id = API.buy(stake, asset, signal.lower(), 1)
-                        if check:
-                            time_lib.sleep(62)
-                            res = API.check_win_v2(id)
-                            st.session_state['trades'].append({
-                                "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": signal,
-                                "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res, 
-                                "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
-                                "ATR": stats["ATR"], "Trend": stats["Trend"]
-                            })
-                            st.session_state['daily_pnl'] += res
-                            st.rerun()
-                            
-            status.update(label="✅ Scansione completata. In attesa...", state="complete")
-else:
-    if not st.session_state['iq_api']:
-        st.info("👋 Effettua il login per attivare il sistema.")
-    else:
-        st.warning("⚠️ Bot in pausa.")
-
+                            if paper_trading:
+                                st.info(f"🧪 [SIM] Esecuzione {signal} su {asset}")
+                                time_lib.sleep(60)
+                                df_post = get_data_from_iq(API, asset)
+                                if not df_post.empty:
+                                    price_end = df_post['close'].iloc[-1]
+                                    sim_win = price_end > stats["Price"] if signal == "CALL" else price_end < stats["Price"]
+                                    res = (stake * 0.85) if sim_win else -stake 
+                                    st.session_state['trades'].append({
+                                        "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": f"SIM-{signal}",
+                                        "Esito": "WIN" if sim_win else "LOSS", "Profitto": res, 
+                                        "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
+                                        "ATR": stats["ATR"], "Trend": stats["Trend"]
+                                    })
+                                    st.session_state['sim_pnl'] += res
+                                    st.rerun()
+                            else:
+                                check, id = API.buy(stake, asset, signal.lower(), 1)
+                                if check:
+                                    time_lib.sleep(62)
+                                    res = API.check_win_v2(id)
+                                    st.session_state['trades'].append({
+                                        "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": signal,
+                                        "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res, 
+                                        "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
+                                        "ATR": stats["ATR"], "Trend": stats["Trend"]
+                                    })
+                                    st.session_state['daily_pnl'] += res
+                                    st.rerun()
+                        else:
+                            st.write(f"⏭️ {asset} ignorato: Differenziale forza insufficiente.")
 st.markdown("---")
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
