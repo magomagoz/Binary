@@ -83,7 +83,6 @@ def get_session_status():
     # Se è Sabato o Domenica (fino alle 22:00), i mercati reali sono chiusi
     if giorno_settimana == 5 or (giorno_settimana == 6 and ora_roma < 22):
         return {
-            "Sidney 🇦🇺": False,
             "Tokyo 🇯🇵": False,
             "Londra 🇬🇧": False,
             "New York 🇺🇸": False,
@@ -91,10 +90,9 @@ def get_session_status():
         }
     
     status = {
-        "Sidney 🇦🇺": 22 <= ora_roma or ora_roma < 7,
-        "Tokyo 🇯🇵": 1 <= ora_roma < 10,
-        "Londra 🇬🇧": 9 <= ora_roma < 18,
-        "New York 🇺🇸": 15 <= ora_roma < 22,
+        "Tokyo 🇯🇵": 1 <= ora_roma < 7:30,
+        "Londra 🇬🇧": 9 <= ora_roma < 17:30,
+        "New York 🇺🇸": 15:30 <= ora_roma < 22,
     }
     
     # Aggiunta info Overlap per l'utente
