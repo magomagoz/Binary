@@ -82,7 +82,7 @@ def get_session_status():
 
     # Controllo Weekend
     if giorno == 5 or (giorno == 4 and ora_gmt >= 22) or (giorno == 6 and ora_gmt < 21):
-        return {"STATO": "CHIUSI 🔴", "sessions": {}}
+        return {"STATO": "CLOSED 🔴", "sessions": {}}
 
     # Definizione Borse
     sessions = {
