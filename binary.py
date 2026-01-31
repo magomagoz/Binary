@@ -226,6 +226,12 @@ for s_name, is_open in get_session_status().items():
     color = "🟢" if is_open else "🔴"
     st.sidebar.markdown(f"**{s_name}**: {'Open' if is_open else 'Closed'} {color}")
 
+# Da inserire in st.sidebar per un test rapido
+st.sidebar.markdown("---")
+if st.sidebar.button("🧪 Test Telegram"):
+    send_telegram_msg("✅ Sentinel AI: Sistema pronto per la riapertura di Lunedì!")
+    st.sidebar.success("Messaggio inviato!")
+
 # Reset Sidebar
 st.sidebar.markdown("---")
 with st.sidebar.popover("🗑️ **Reset Cronologia**"):
@@ -251,13 +257,22 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         st.session_state['trading_attivo'] = False
     else:
         API = st.session_state['iq_api']
+
+        # --- CONTROLLO STATO MERCATI ---
+        is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
         
-        # --- PROTEZIONE WEEKEND ---
-        giorno_settimana = datetime.now(pytz.timezone('Europe/Rome')).weekday()
-        if giorno_settimana >= 5:
-            st.error("🛑 MERCATI CHIUSI. Il trading automatico è disabilitato nel weekend per evitare i mercati OTC.")
+        if is_weekend:
+            st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC.")
             st.session_state['trading_attivo'] = False
-            st.stop() 
+            # Rimuovi st.stop() se vuoi comunque vedere il grafico, 
+            # oppure lascialo se vuoi bloccare tutto.
+
+        # --- PROTEZIONE WEEKEND ---
+        #giorno_settimana = datetime.now(pytz.timezone('Europe/Rome')).weekday()
+        #if giorno_settimana >= 5:
+            #st.error("🛑 MERCATI CHIUSI. Il trading automatico è disabilitato nel weekend per evitare i mercati OTC.")
+            #st.session_state['trading_attivo'] = False
+            #st.stop() 
 
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
 
