@@ -53,8 +53,6 @@ if 'last_scan_status' not in st.session_state: st.session_state['last_scan_statu
 if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
 if 'confirm_real' not in st.session_state: st.session_state['confirm_real'] = False
 
-check_market_alerts()
-
 # --- MAPPA ASSET ---
 asset_map = {
     "EUR/USD": "EURUSD",
