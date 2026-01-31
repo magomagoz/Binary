@@ -216,6 +216,7 @@ def check_binary_signal(df):
     
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
+    # Invio alle 22:05
     if now.strftime("%H:%M") == "22:05":
         if st.session_state.get("last_daily_report_date") != now.date():
             trades = st.session_state.get('trades', [])
@@ -230,55 +231,9 @@ def send_daily_report():
                 msg = (f"📊 *REPORT GIORNALIERO SENTINEL*\n"
                        f"✅ Vinte: {wins} | ❌ Perse: {losses}\n"
                        f"📈 Win Rate: {win_rate:.1f}%\n"
-                       f"💰 *Profitto: € {pnl_tot:.2f}*")
+                       f"💰 *Profitto Totale: € {pnl_tot:.2f}*")
             send_telegram_msg(msg)
             st.session_state["last_daily_report_date"] = now.date()
-
-    # --- CALCOLO INDICATORI ---
-    # Bollinger & RSI
-    bb = ta.bbands(df['close'], length=20, std=2.2)
-    rsi = ta.rsi(df['close'], length=7).iloc[-1]
-    
-    # ADX & ATR
-    adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
-    adx = adx_df['ADX_14'].iloc[-1]
-    atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
-    
-    # EMA 200 (Trend Primario)
-    ema200 = ta.ema(df['close'], length=200).iloc[-1]
-    
-    # Stocastico (K=14, D=3)
-    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
-    curr_stoch_k = stoch['STOCHk_14_3_3'].iloc[-1]
-    
-    # Limiti Bande
-    bbl = bb.iloc[-1, 0]
-    bbu = bb.iloc[-1, 2]
-    curr_close = df['close'].iloc[-1]
-    
-    # Snapshot completo per Cronologia
-    stats = {
-        "Price": curr_close,
-        "RSI": round(rsi, 2),
-        "ADX": round(adx, 2),
-        "ATR": round(atr, 5),
-        "EMA200": round(ema200, 5),
-        "Stoch_K": round(curr_stoch_k, 2),
-        "Trend": "UP" if curr_close > ema200 else "DOWN"
-    }
-
-    # --- LOGICA DI FILTRO AVANZATA ---
-    # 1. Filtro Volatilità (ADX)
-    if 15 < adx < 35:
-        # 2. Condizione CALL (Ipervenduto + Stocastico basso + Sopra EMA200 per sicurezza)
-        if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
-            return "CALL", stats
-            
-        # 3. Condizione PUT (Ipercomprato + Stocastico alto + Sotto EMA200 per sicurezza)
-        elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
-            return "PUT", stats
-            
-    return None, stats
 
 def is_strength_valid(asset, strength_series, threshold=0.15):
     try:
@@ -396,8 +351,9 @@ with st.sidebar.popover("🗑️ **Reset Cronologia**"):
     st.warning("Sei sicuro? Questa azione cancellerà tutti i segnali salvati.")
 
     if st.button("SÌ, CANCELLA ORA"):
-        st.session_state['signal_history'] = pd.DataFrame(columns=['DataOra', 'Asset', 'Direzione', 'Prezzo', 'SL', 'TP', 'Size', 'Stato'])
-        save_history_permanently() # Questo sovrascrive il file CSV con uno vuoto
+        st.session_state['trades'] = []
+        st.session_state['daily_pnl'] = 0.0
+        st.session_state['sim_pnl'] = 0.0
         st.rerun()
 
 # --- MAIN INTERFACE ---
@@ -449,7 +405,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 if not df.empty:
                     df['rsi'] = ta.rsi(df['close'], length=14) 
                     
-                    # 1. Divergenza (Informativa)
+                    # 1. Analisi Divergenza
                     div_status = detect_divergence(df)
                     if div_status != "NESSUNA" and div_status != "N/A":
                         last_div_key = f"last_div_{asset}"
@@ -457,42 +413,33 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
                             st.session_state[last_div_key] = div_status
     
-                    # 2. Segnale Operativo Tecnico
+                    # 2. Segnale Tecnico (BB + RSI + Stoch)
                     signal, stats = check_binary_signal(df)
                     
                     if signal:
-                        # 3. FILTRO FORZA VALUTA (Esecutivo)
+                        # 3. FILTRO FORZA VALUTA (Check finale prima di operare)
                         if is_strength_valid(asset, currency_strength, threshold=0.15):
-                            telegram_text = (f"🚀 *SEGNALE VALIDATO: {signal}*\n📈 Asset: {asset}\n"
-                                             f"💰 Prezzo: {stats['Price']}\n🎯 RSI: {stats['RSI']}")
-                            send_telegram_msg(telegram_text)
-                    
-                    if paper_trading:
-                        # Suono leggero (Ping) per la Simulazione
-                        st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/despot/ping.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
-                        st.info(f"🧪 SEGNALE TEST: {signal} su {asset}")
-                    else:
-                        # Suono deciso (Siren/Arrow) per Trading Reale
-                        st.markdown("""<audio autoplay><source src="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
-                        st.warning(f"🔥 SEGNALE REALE: {signal} su {asset}!")
-
+                            msg_sent = f"🚀 *SEGNALE VALIDATO: {signal}* su {asset}"
+                            send_telegram_msg(msg_sent)
+                            
                             if paper_trading:
-                                st.info(f"🧪 [SIM] Esecuzione {signal} su {asset}")
-                                time_lib.sleep(60)
+                                st.info(f"🧪 [SIM] Analisi {signal} su {asset}")
+                                time_lib.sleep(60) # Aspetta scadenza candela
                                 df_post = get_data_from_iq(API, asset)
                                 if not df_post.empty:
                                     price_end = df_post['close'].iloc[-1]
-                                    sim_win = price_end > stats["Price"] if signal == "CALL" else price_end < stats["Price"]
-                                    res = (stake * 0.85) if sim_win else -stake 
+                                    win = price_end > stats["Price"] if signal == "CALL" else price_end < stats["Price"]
+                                    res = (stake * 0.85) if win else -stake
                                     st.session_state['trades'].append({
                                         "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": f"SIM-{signal}",
-                                        "Esito": "WIN" if sim_win else "LOSS", "Profitto": res, 
+                                        "Esito": "WIN" if win else "LOSS", "Profitto": res, 
                                         "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
                                         "ATR": stats["ATR"], "Trend": stats["Trend"]
                                     })
                                     st.session_state['sim_pnl'] += res
                                     st.rerun()
                             else:
+                                # TRADING REALE
                                 check, id = API.buy(stake, asset, signal.lower(), 1)
                                 if check:
                                     time_lib.sleep(62)
@@ -506,7 +453,8 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                                     st.session_state['daily_pnl'] += res
                                     st.rerun()
                         else:
-                            st.write(f"⏭️ {asset} ignorato: Differenziale forza insufficiente.")
+                            st.write(f"⏭️ {asset}: Segnale presente ma Forza Valuta non valida.")
+
 st.markdown("---")
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
