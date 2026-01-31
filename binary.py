@@ -174,12 +174,48 @@ def detect_divergence(df):
         return "N/A"
 
 def check_binary_signal(df):
-    if df.empty or len(df) < 200: # Servono 200 candele per l'EMA
+    if df.empty or len(df) < 200:
         return None, {}
+
+    # --- CALCOLO INDICATORI (TUTTO DENTRO LA FUNZIONE) ---
+    bb = ta.bbands(df['close'], length=20, std=2.2)
+    rsi_series = ta.rsi(df['close'], length=7)
+    rsi = rsi_series.iloc[-1]
+    
+    adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
+    adx = adx_df['ADX_14'].iloc[-1]
+    atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
+    
+    ema200 = ta.ema(df['close'], length=200).iloc[-1]
+    
+    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
+    curr_stoch_k = stoch['STOCHk_14_3_3'].iloc[-1]
+    
+    bbl = bb.iloc[-1, 0]
+    bbu = bb.iloc[-1, 2]
+    curr_close = df['close'].iloc[-1]
+    
+    stats = {
+        "Price": curr_close,
+        "RSI": round(rsi, 2),
+        "ADX": round(adx, 2),
+        "ATR": round(atr, 5),
+        "EMA200": round(ema200, 5),
+        "Stoch_K": round(curr_stoch_k, 2),
+        "Trend": "UP" if curr_close > ema200 else "DOWN"
+    }
+
+    # --- LOGICA DI FILTRO ---
+    if 15 < adx < 35:
+        if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
+            return "CALL", stats
+        elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
+            return "PUT", stats
+            
+    return None, stats
     
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
-    # Invio del report alle 22:05 (subito dopo la chiusura di NY)
     if now.strftime("%H:%M") == "22:05":
         if st.session_state.get("last_daily_report_date") != now.date():
             trades = st.session_state.get('trades', [])
@@ -191,16 +227,10 @@ def send_daily_report():
                 losses = len(df[df['Esito'] == 'LOSS'])
                 win_rate = (wins / len(df)) * 100
                 pnl_tot = df['Profitto'].sum()
-                
-                msg = (
-                    f"📊 *REPORT GIORNALIERO SENTINEL*\n"
-                    f"📅 Data: {now.date()}\n\n"
-                    f"✅ Operazioni Vinte: {wins}\n"
-                    f"❌ Operazioni Perse: {losses}\n"
-                    f"📈 Win Rate: {win_rate:.1f}%\n"
-                    f"💰 *Profitto Totale: € {pnl_tot:.2f}*"
-                )
-            
+                msg = (f"📊 *REPORT GIORNALIERO SENTINEL*\n📅 Data: {now.date()}\n\n"
+                       f"✅ Vinte: {wins} | ❌ Perse: {losses}\n"
+                       f"📈 Win Rate: {win_rate:.1f}%\n"
+                       f"💰 *Profitto Totale: € {pnl_tot:.2f}*")
             send_telegram_msg(msg)
             st.session_state["last_daily_report_date"] = now.date()
 
@@ -249,6 +279,15 @@ def send_daily_report():
             return "PUT", stats
             
     return None, stats
+
+def is_strength_valid(asset, strength_series, threshold=0.15):
+    try:
+        base_val = [val for curr, val in strength_series.items() if asset[:3] in curr]
+        quote_val = [val for curr, val in strength_series.items() if asset[3:] in curr]
+        if base_val and quote_val:
+            return abs(base_val[0] - quote_val[0]) >= threshold
+        return True
+    except: return True
 
 # --- SIDEBAR: ACCESSO E CONFIGURAZIONE ---
 st.sidebar.title("🔐 IQ Option Access")
@@ -402,39 +441,32 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
 
+        currency_strength = get_iq_currency_strength(API) # Calcolo forza valute globale
+        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=False) as status:
             for asset in assets_to_scan:
                 st.write(f"Verifica {asset}...")
                 df = get_data_from_iq(API, asset)
-                
                 if not df.empty:
-                    # 1. Calcolo indicatori necessari (RSI serve per la divergenza)
                     df['rsi'] = ta.rsi(df['close'], length=14) 
-    
-                    # 2. INSERISCI QUI LA LOGICA DIVERGENZA
+                    
+                    # 1. Divergenza
                     div_status = detect_divergence(df)
                     if div_status != "NESSUNA" and div_status != "N/A":
                         last_div_key = f"last_div_{asset}"
                         if st.session_state.get(last_div_key) != div_status:
-                            msg_div = f"⚠️ *DIVERGENZA RILEVATA su {asset}*\nTipo: {div_status}\nMonitora il grafico per un possibile cambio trend!"
-                            send_telegram_msg(msg_div)
+                            send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
                             st.session_state[last_div_key] = div_status
     
-                    # 3. Controllo segnale operativo (quello che avevi già)
+                    # 2. Segnale Operativo
                     signal, stats = check_binary_signal(df)
                     
-                if signal:
-                    # Costruzione del messaggio con i tuoi dati reali
-                    telegram_text = (
-                        f"🚀 *NUOVO SEGNALE: {signal}*\n"
-                        f"📈 Asset: {asset}\n"
-                        f"💰 Entrata: {stats['Price']}\n"
-                        f"🎯 RSI: {stats['RSI']}\n"
-                        f"🛡️ ADX: {stats['ADX']}\n"
-                        f"______________________"
-                        f"💳 Investimento: {stake}€"
-                    )
-                    send_telegram_msg(telegram_text)
+                    if signal:
+                        # 3. Filtro Forza Valuta
+                        if is_strength_valid(asset, currency_strength, threshold=0.15):
+                            telegram_text = (f"🚀 *NUOVO SEGNALE: {signal}*\n📈 Asset: {asset}\n"
+                                             f"💰 Prezzo: {stats['Price']}\n🎯 RSI: {stats['RSI']}")
+                            send_telegram_msg(telegram_text)
                     
                     if paper_trading:
                         # Suono leggero (Ping) per la Simulazione
