@@ -8,6 +8,18 @@ import pytz
 import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import requests # Assicurati che sia tra gli import in alto
+
+def send_telegram_msg(message):
+    try:
+        # Recupera token e ID dai secrets
+        token = st.secrets["TELEGRAM_TOKEN"]
+        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        st.error(f"Errore invio Telegram: {e}")
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
@@ -56,13 +68,24 @@ def send_telegram_msg(message):
     st.write(f"📲 Telegram Log: {message}")
 
 def get_session_status():
-    # Otteniamo l'ora attuale a Roma
-    ora_roma = datetime.now(pytz.timezone('Europe/Rome')).hour
+    dt_roma = datetime.now(pytz.timezone('Europe/Rome'))
+    ora_roma = dt_roma.hour
+    giorno_settimana = dt_roma.weekday() # 5 = Sabato, 6 = Domenica
+
+    # Se è Sabato o Domenica, i mercati reali sono chiusi
+    if giorno_settimana >= 5:
+        return {
+            "Tokyo 🇯🇵": False,
+            "Londra 🇬🇧": False,
+            "New York 🇺🇸": False,
+            "Weekend": False # Segnale extra per il sistema
+        }
     
     return {
-        "Tokyo 🇯🇵": 0 <= ora_roma < 9,
-        "Londra 🇬🇧": 9 <= ora_roma < 18,        
-        "New York 🇺🇸": 14 <= ora_roma < 23
+        "Tokyo 🇯🇵": 1 <= ora_roma < 8,
+        "Londra 🇬🇧": 9 <= ora_roma < 18,
+        "New York 🇺🇸": 15 <= ora_roma < 22,
+        "Weekend": True
     }
 
 # --- FUNZIONI TECNICHE IQ OPTION ---
@@ -78,7 +101,7 @@ def get_data_from_iq(API, asset):
 
 def get_iq_currency_strength(API):
     try:
-        pairs = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]
+        pairs = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
         weights = {}
         for pair in pairs:
             candles = API.get_candles(pair, 60, 60, time_lib.time())
@@ -228,8 +251,16 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         st.session_state['trading_attivo'] = False
     else:
         API = st.session_state['iq_api']
-        assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "AUDUSD"]
         
+        # --- PROTEZIONE WEEKEND ---
+        giorno_settimana = datetime.now(pytz.timezone('Europe/Rome')).weekday()
+        if giorno_settimana >= 5:
+            st.error("🛑 MERCATI CHIUSI. Il trading automatico è disabilitato nel weekend per evitare i mercati OTC.")
+            st.session_state['trading_attivo'] = False
+            st.stop() 
+
+        assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
+
         with st.status("🔍 Scansione Sentinel in corso...", expanded=False) as status:
             for asset in assets_to_scan:
                 st.write(f"Verifica {asset}...")
@@ -297,6 +328,16 @@ else:
     else:
         st.warning("⚠️ Bot in pausa.")
 
+        # Controllo Weekend
+        status_mercati = get_session_status()
+        is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
+        
+if is_weekend:
+    st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC.")
+    st.session_state['trading_attivo'] = False
+    st.stop() # Ferma l'esecuzione qui
+
+
 # --- GRAFICO IN TEMPO REALE ---
 st.markdown("---")
 st.subheader(f"📈 Grafico con Indicatori Sentinel (1m)")
@@ -341,22 +382,53 @@ if st.session_state['iq_api']:
             fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
             
             # Bande di Bollinger
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), name='BB Upper'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.3)', width=1), name='BB Upper'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.3)', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
             
             # RSI
             fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='yellow'), name='RSI'), row=2, col=1)
-            fig.add_hline(y=75, line_dash="dot", line_color="red", row=2, col=1)
-            fig.add_hline(y=25, line_dash="dot", line_color="green", row=2, col=1)
 
-            # --- ORA PUOI AGGIUNGERE LE LINEE VERTICALI SE VUOI (OPZIONALE) ---
-            # Questo usa df_rt (non p_df) e avviene dopo aver creato fig
+            # --- AGGIUNTA FRECCE SEGNALI (Dallo storico trade) ---
+            for trade in st.session_state['trades']:
+                # Mostriamo solo i segnali dell'asset attualmente visualizzato
+                if trade['Asset'] == pair:
+                    try:
+                        trade_time = pd.to_datetime(trade['Ora'], format='%H:%M:%S').replace(
+                            year=df_rt.index[-1].year, month=df_rt.index[-1].month, day=df_rt.index[-1].day
+                        ).tz_localize('Europe/Rome')
+
+                        color = "lime" if "CALL" in trade['Tipo'] else "red"
+                        symbol = "triangle-up" if "CALL" in trade['Tipo'] else "triangle-down"
+                        y_pos = df_rt.loc[trade_time, 'low'] * 0.9999 if "CALL" in trade['Tipo'] else df_rt.loc[trade_time, 'high'] * 1.0001
+                        
+                        fig.add_trace(go.Scatter(
+                            x=[trade_time], y=[y_pos],
+                            mode="markers",
+                            marker=dict(symbol=symbol, size=15, color=color, line=dict(width=2, color="white")),
+                            name=trade['Tipo']
+                        ), row=1, col=1)
+                    except: continue
+
+            # --- FORZATURA ZOOM 1 ORA E GRIGLIA ---
+            ora_fine = df_rt.index[-1]
+            ora_inizio = ora_fine - pd.Timedelta(minutes=60)
+
+            fig.update_xaxes(
+                range=[ora_inizio, ora_fine],
+                type="date", # Forza il tipo data per lo zoom
+                dtick=60000, # Linea ogni minuto
+                gridcolor='rgba(255, 255, 255, 0.05)',
+                row=1, col=1
+            )
+
+            # Linee verticali per ogni minuto
             for t in df_rt.index:
-                if t.minute % 10 == 0:
-                    fig.add_vline(x=t, line_width=0.5, line_dash="dot", line_color="rgba(255, 255, 255, 0.1)")
+                if t >= ora_inizio:
+                    fig.add_vline(x=t, line_width=0.4, line_color="rgba(255,255,255,0.1)", row="all")
 
-            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
+            fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False, showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
+            
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
 
@@ -405,8 +477,6 @@ if st.session_state['iq_api']:
             cols[i].markdown(f"<div style='text-align:center; background:{bg}; padding:10px; border-radius:5px;'><b>{curr}</b><br>{val:.2f}%</div>", unsafe_allow_html=True)
 
 # --- REPORTING ---
-#st.markdown("---")
-#st.subheader(f"📊 Risultato Sessione: € {st.session_state['daily_pnl']:.2f}")
 st.divider()
 col_res1, col_res2 = st.columns(2)
 with col_res1:
@@ -423,117 +493,36 @@ st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; bord
 time_lib.sleep(60)
 st.rerun()
 
-# --- SEZIONE ANALISI TECNICA POST-SESSIONE (DEEP ANALYSIS) ---
+# --- SEZIONE ANALISI TECNICA POST-SESSIONE ---
 st.markdown("---")
 st.subheader("🔬 Sentinel Deep Analysis")
 
 if st.session_state['trades']:
     df_analysis = pd.DataFrame(st.session_state['trades'])
     
-    # 1. Metriche di Performance Indicatori
-    avg_rsi_win = df_analysis[df_analysis['Esito'] == 'WIN']['RSI'].mean()
-    avg_adx_win = df_analysis[df_analysis['Esito'] == 'WIN']['ADX'].mean()
+    # Metriche
     win_rate = (len(df_analysis[df_analysis['Esito'] == 'WIN']) / len(df_analysis)) * 100
-    
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("RSI Medio (WIN)", f"{avg_rsi_win:.2f}")
-    c2.metric("ADX Medio (WIN)", f"{avg_adx_win:.2f}")
-    c3.metric("Win Rate", f"{win_rate:.1f}%")
-    c4.metric("Segnali Totali", len(df_analysis))
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Win Rate", f"{win_rate:.1f}%")
+    c2.metric("RSI Medio", f"{df_analysis['RSI'].mean():.2f}")
+    c3.metric("Segnali Totali", len(df_analysis))
 
-    # 2. Visualizzazione Grafica (RSI vs ADX e ATR)
-    col_g1, col_g2 = st.columns(2)
-    
-    with col_g1:
-        # Grafico a dispersione per vedere dove si concentrano i successi
-        fig_an = go.Figure()
-        fig_an.add_trace(go.Scatter(
-            x=df_analysis['RSI'], y=df_analysis['ADX'],
-            mode='markers',
-            marker=dict(
-                color=['#00ffcc' if e == 'WIN' else '#ff4b4b' for e in df_analysis['Esito']], 
-                size=12,
-                line=dict(width=1, color='white')
-            ),
-            text=df_analysis['Asset']
-        ))
-            
-    # --- CONFIGURAZIONE GRIGLIA E ASSE X ---
-        # Mostriamo esattamente gli ultimi 60 minuti (1 ora)
-        # Calcoliamo il range temporale
-        ora_fine = df_rt.index[-1]
-        ora_inizio = ora_fine - pd.Timedelta(minutes=60)
+    # Grafico Distribuzione
+    fig_an = go.Figure()
+    fig_an.add_trace(go.Scatter(
+        x=df_analysis['RSI'], y=df_analysis['ADX'],
+        mode='markers',
+        marker=dict(
+            color=['#00ffcc' if e == 'WIN' else '#ff4b4b' for e in df_analysis['Esito']], 
+            size=12, line=dict(width=1, color='white')
+        ),
+        text=df_analysis['Asset']
+    ))
+    fig_an.update_layout(title="Analisi RSI vs ADX", template="plotly_dark", height=400)
+    st.plotly_chart(fig_an, use_container_width=True)
 
-        fig.update_xaxes(
-            range=[ora_inizio, ora_fine],
-            showgrid=True,
-            gridwidth=1,
-            gridcolor='rgba(255, 255, 255, 0.05)', # Griglia di base molto tenue
-            dtick=60000, # Forza un tick ogni 60.000 ms (ovvero 1 minuto)
-            tickformat="%H:%M"
-        )
-
-        # Aggiunta manuale di linee verticali più evidenti per ogni minuto
-        for timestamp in df_rt.index:
-            if timestamp >= ora_inizio:
-                fig.add_vline(
-                    x=timestamp, 
-                    line_width=0.5, 
-                    line_dash="solid", 
-                    line_color="rgba(173, 216, 230, 0.1)", # Colore azzurro tenue
-                    layer="below"
-                )
-
-        fig.update_layout(
-            height=600, # Aumentato per vedere meglio i dettagli
-            template="plotly_dark",
-            xaxis_rangeslider_visible=False,
-            margin=dict(l=10, r=10, t=10, b=10),
-            showlegend=False
-        )
-            
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col_g2:
-        # Analisi ATR vs Esito (Impatto Volatilità)
-        fig_atr = go.Figure()
-        fig_atr.add_trace(go.Box(
-            x=df_analysis['Esito'], 
-            y=df_analysis['ATR'], 
-            name="Volatilità ATR",
-            marker_color='#00bfff'
-        ))
-        fig_atr.update_layout(
-            title="Impatto Volatilità (ATR)", 
-            template="plotly_dark", 
-            height=350,
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
-        st.plotly_chart(fig_atr, use_container_width=True)
-
-    st.markdown("---")
-    # 3. Tabella Storico Dettagliata con formattazione
-    st.write("📑 **Dettaglio Tecnico Operazioni**")
-    
-    def color_result(val):
-        color = '#006400' if val == 'WIN' else '#8B0000'
-        return f'background-color: {color}; color: white'
-
-    st.dataframe(
-        df_analysis.style.applymap(color_result, subset=['Esito']), 
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # 4. Tasto di Esportazione CSV
+    # Tasto Export
     csv = df_analysis.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 SCARICA REPORT ANALITICO (CSV)",
-        data=csv,
-        file_name=f"Sentinel_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
+    st.download_button("📥 SCARICA REPORT (CSV)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
 else:
-    st.info("⏳ In attesa della prima operazione per generare l'analisi statistica e il report.")
+    st.info("⏳ In attesa di dati per l'analisi profonda.")
