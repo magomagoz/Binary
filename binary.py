@@ -477,7 +477,7 @@ st.markdown("---")
 selected_label = st.selectbox("Seleziona Asset per Grafico", list(asset_map.keys()))
 pair = asset_map[selected_label] # <--- QUESTA RIGA RISOLVE L'ERRORE
 
-st.subheader(f"📈 Sentinel View: {selected_label} (1m)")
+st.subheader(f"📈 Grafico in tempo reale: {selected_label} (1m)")
 
 if st.session_state['iq_api']:
     try:
