@@ -434,9 +434,12 @@ if st.session_state['iq_api']:
     except Exception as e:
         st.error(f"Errore caricamento grafico: {e}")
 
+else:
+    st.info("In attesa della connessione...")
+
 st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
-st.markdown("🔍 Sentinel Real-Time Oscillators")
+st.subheader(f"🔍 Sentinel Real-Time Oscillators")
 
 if not df_rt.empty:
     c1, c2, c3, c4 = st.columns(4)
@@ -466,7 +469,7 @@ if not df_rt.empty:
     c4.metric("Distanza BB", f"{min_dist:.5f}", 
               delta="TOCCATA" if dist_up <= 0 or dist_low <= 0 else "IN RANGE")
 else:
-    st.info("In attesa di dati in tempo reale per le metriche...")
+    st.info("In attesa della connessione...")
 
 # --- CURRENCY STRENGTH ---
 st.markdown("---")
@@ -478,17 +481,19 @@ if st.session_state['iq_api']:
         for i, (curr, val) in enumerate(s_data.items()):
             bg = "rgba(0,255,0,0.2)" if val > 0 else "rgba(255,0,0,0.2)"
             cols[i].markdown(f"<div style='text-align:center; background:{bg}; padding:10px; border-radius:5px;'><b>{curr}</b><br>{val:.2f}%</div>", unsafe_allow_html=True)
+else:
+    st.info("In attesa della connessione...")
 
 # --- REPORTING ---
 st.divider()
-st.subheader(f"📊 Analisi Operativa")
+#st.subheader(f"📊 Analisi Operativa")
 
 col_res1, col_res2 = st.columns(2)
 with col_res1:
-    st.markdown("💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
+    st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
 with col_res2:
     sim_pnl = st.session_state.get('sim_pnl', 0.0)
-    st.markdown("🧪 Profitto Simulato: € {sim_pnl:.2f}")
+    stsubheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
@@ -530,4 +535,4 @@ if st.session_state['trades']:
     csv = df_analysis.to_csv(index=False).encode('utf-8')
     st.download_button("📥 SCARICA REPORT (CSV)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
 else:
-    st.info("⏳ In attesa di dati per l'analisi profonda.")
+    st.info("⏳ In attesa di dati per l'analisi")
