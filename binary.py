@@ -39,7 +39,8 @@ def send_telegram_msg(message):
     
     except Exception as e:
         st.sidebar.error(f"Errore connessione Telegram: {e}")
-    
+
+# --- CONFIGURAZIONE LOGGING & STATO INIZIALE ---
 logging.disable(logging.CRITICAL)
 
 # Inizializzazione rigorosa di TUTTE le variabili di stato per evitare KeyError
@@ -52,6 +53,10 @@ if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = 
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
 if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
 if 'confirm_real' not in st.session_state: st.session_state['confirm_real'] = False
+if 'last_market_alert' not in st.session_state: 
+    st.session_state['last_market_alert'] = ""
+if 'last_daily_report_date' not in st.session_state: 
+    st.session_state['last_daily_report_date'] = None
 
 # --- MAPPA ASSET ---
 asset_map = {
