@@ -181,7 +181,7 @@ if st.session_state['iq_api'] is None:
     st.sidebar.error("🔴 STATO: DISCONNESSO")
     user_mail = st.sidebar.text_input("Email IQ", value=IQ_EMAIL)
     user_pass = st.sidebar.text_input("Password IQ", type="password", value=IQ_PASS)
-    if st.sidebar.button("🔌 Connetti CONTO PRACTICE, use_container_width=True):
+    if st.sidebar.button(🔌 Connetti CONTO PRACTICE, use_container_width=True):
         api = IQ_Option(user_mail, user_pass)
         check, reason = api.connect()
         if check:
