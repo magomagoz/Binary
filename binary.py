@@ -75,28 +75,30 @@ asset_map = {
 def get_now_rome():
     return datetime.now(pytz.timezone('Europe/Rome'))
 
-#ultima
 def get_session_status():
-    # Otteniamo l'ora attuale in UTC/GMT
     now_gmt = datetime.now(pytz.utc)
     ora_gmt = now_gmt.hour + now_gmt.minute / 60
-    giorno = now_gmt.weekday() # 0=Lunedì, 6=Domenica
+    giorno = now_gmt.weekday() 
 
-    # Mercato chiuso: dal Venerdì ore 22:00 GMT alla Domenica ore 21:00 GMT
+    # 1. Controllo Weekend
     if giorno == 5 or (giorno == 4 and ora_gmt >= 22) or (giorno == 6 and ora_gmt < 21):
-        return {"Mercati": "CHIUSI 🔴", "Sidney": False, "Tokyo": False, "Londra": False, "New York": False}
+        return {"STATO_GLOBALE": "CHIUSI 🔴", "Sidney": False, "Tokyo": False, "Londra": False, "New York": False}
 
-    status = {
+    # 2. Definizione Borse
+    sessions = {
         "Sidney 🇦🇺": 21 <= ora_gmt or ora_gmt < 6,
         "Tokyo 🇯🇵": 0 <= ora_gmt < 9,
         "Londra 🇬🇧": 8 <= ora_gmt < 17,
         "New York 🇺🇸": 13 <= ora_gmt < 22,
     }
     
-    # Rilevamento Overlap "Golden" (Londra + NY)
-    status["MERCATO"] = "OVERLAP 🔥" if (status["Londra 🇬🇧"] and status["New York 🇺🇸"]) else "OPERATIVO 🟢"
-    
-    return status
+    # 3. Calcolo Stato Globale
+    if sessions["Londra"] and sessions["New York"]:
+        sessions["STATO_GLOBALE"] = "OVERLAP 🔥"
+    else:
+        sessions["STATO_GLOBALE"] = "APERTO 🟢"
+        
+    return sessions
 
 def check_market_alerts():
     # Usiamo il fuso orario UTC (GMT)
@@ -322,9 +324,17 @@ else:
 
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di mercato")
-for s_name, is_open in get_session_status().items():
-    color = "🟢" if is_open else "🔴"
-    st.sidebar.markdown(f"**{s_name}**: {'Aperto' if is_open else 'Chiuso'} {color}")
+status_data = get_session_status()
+
+# Mostra prima lo stato generale
+st.sidebar.markdown(f"**Mercati**: {status_data['STATO_GLOBALE']}")
+
+# Ciclo solo sulle borse (saltando la chiave STATO_GLOBALE)
+for s_name, is_open in status_data.items():
+    if s_name != "STATO_GLOBALE":
+        icon = "🟢" if is_open else "🔴"
+        label = "Aperto" if is_open else "Chiuso"
+        st.sidebar.markdown(f"**{s_name}**: {label} {icon}")
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
