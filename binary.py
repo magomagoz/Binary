@@ -1,6 +1,8 @@
+
 import streamlit as st
 import pandas as pd
 import pandas_ta as ta
+import requests # Assicurati che sia tra gli import in alto
 from iqoptionapi.stable_api import IQ_Option
 import time as time_lib
 from datetime import datetime
@@ -8,7 +10,6 @@ import pytz
 import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import requests # Assicurati che sia tra gli import in alto
 
 def send_telegram_msg(message):
     try:
