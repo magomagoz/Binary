@@ -35,7 +35,7 @@ def send_telegram_msg(message):
         if not response.ok:
             st.sidebar.error(f"Errore Telegram: {response.text}")
         else:
-            st.write(f"📲 Telegram Log: {message}")       
+            st.write(f"📲 Invio messaggio Telegram: {message}")       
     
     except Exception as e:
         st.sidebar.error(f"Errore connessione Telegram: {e}")
@@ -184,7 +184,7 @@ if st.session_state['iq_api'] is None:
     st.sidebar.error("🔴 STATO: DISCONNESSO")
     user_mail = st.sidebar.text_input("Email IQ", value=IQ_EMAIL)
     user_pass = st.sidebar.text_input("Password IQ", type="password", value=IQ_PASS)
-    if st.sidebar.button("🔌 Connetti CONTO PRACTICE 🟢", use_container_width=True):
+    if st.sidebar.button("🔌 Connetti", use_container_width=True):
         api = IQ_Option(user_mail, user_pass)
         check, reason = api.connect()
         if check:
@@ -197,18 +197,17 @@ else:
     st.sidebar.success("🟢 STATO: IN LINEA")
     API = st.session_state['iq_api']
     
-    # --- LOGICA SWITCH CONTO ---
     # --- LOGICA SWITCH CONTO CON SICUREZZA ---
     col_p, col_r = st.sidebar.columns(2)
     
     # Pulsante Practice (Sempre diretto)
-    if col_p.button("🎮 PRACTICE", use_container_width=True):
+    if col_p.button("🎮 Conto PRACTICE", use_container_width=True):
         API.change_balance("PRACTICE")
         st.session_state['confirm_real'] = False # Reset sicurezza
         st.rerun()
         
     # Pulsante Reale (Attiva la richiesta di conferma)
-    if col_r.button("💰 REALE", use_container_width=True, type="primary"):
+    if col_r.button("💰 Conto REALE", use_container_width=True, type="primary"):
         st.session_state['confirm_real'] = True
 
     # --- POP-UP DI CONFERMA (Inline nella Sidebar) ---
@@ -236,7 +235,7 @@ else:
         value=f"€ {current_balance:,.2f}"
     )
 
-    if st.sidebar.button("🚪 Esci e Ferma Bot", use_container_width=True):
+    if st.sidebar.button("🚪 Esci", use_container_width=True):
         st.session_state['iq_api'] = None
         st.session_state['trading_attivo'] = False
         st.rerun()
@@ -319,7 +318,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
         
         if is_weekend:
-            st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC.")
+            st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC")
             st.session_state['trading_attivo'] = False
         
         # --- PROTEZIONE WEEKEND ---
@@ -508,7 +507,7 @@ else:
 
 st.markdown("---")
 # --- METRICHE DINAMICHE (Protezione contro DataFrame vuoto) ---
-st.subheader(f"🔍 Sentinel Real-Time Oscillators")
+st.subheader(f"🔍 Indicatori in tempo reale")
 
 if not df_rt.empty:
     c1, c2, c3, c4 = st.columns(4)
@@ -542,7 +541,7 @@ else:
 
 # --- CURRENCY STRENGTH ---
 st.markdown("---")
-st.subheader("⚡ Currency Strength (IQ Option Data)")
+st.subheader("⚡ Forza delle valute (Dati IQ Option)")
 if st.session_state['iq_api']:
     s_data = get_iq_currency_strength(st.session_state['iq_api'])
     if not s_data.empty:
@@ -574,7 +573,7 @@ st.rerun()
 
 # --- SEZIONE ANALISI TECNICA POST-SESSIONE ---
 st.markdown("---")
-st.subheader("🔬 Sentinel Deep Analysis")
+st.subheader("🔬 Analisi prestazioni")
 
 if st.session_state['trades']:
     df_analysis = pd.DataFrame(st.session_state['trades'])
@@ -602,6 +601,6 @@ if st.session_state['trades']:
 
     # Tasto Export
     csv = df_analysis.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 SCARICA REPORT (CSV)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
+    st.download_button("📥 SCARICA REPORT (.csv)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
 else:
     st.info("⏳ In attesa di dati per l'analisi")
