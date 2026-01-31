@@ -431,72 +431,60 @@ if st.session_state['iq_api']:
             df_rt['adx'] = adx_vis['ADX_14']
             
             # --- CALCOLO INDICATORI PER IL GRAFICO ---
-            # Bollinger
+            # Bollinger (20, 2.2)
             bb = ta.bbands(df_rt['close'], length=20, std=2.2)
             df_rt = pd.concat([df_rt, bb], axis=1)
             c_up = [c for c in df_rt.columns if "BBU" in c.upper()][0]
+            c_mid = [c for c in df_rt.columns if "BBM" in c.upper()][0]
             c_low = [c for c in df_rt.columns if "BBL" in c.upper()][0]
             
-            # RSI (usiamo 7 come nella logica del segnale)
+            # RSI (7)
             df_rt['rsi'] = ta.rsi(df_rt['close'], length=7)
-            
-            # ADX (Necessario per le metriche sotto)
-            adx_df = ta.adx(df_rt['high'], df_rt['low'], df_rt['close'], length=14)
-            df_rt['adx'] = adx_df['ADX_14']
 
-            # Plotly
             # --- CREAZIONE FIGURA ---
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                                row_heights=[0.7, 0.3], vertical_spacing=0.05)
             
-            # Candele
-            fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
+            # 1. Candele
+            fig.add_trace(go.Candlestick(x=df_rt.index, open=df_rt['open'], high=df_rt['high'], 
+                                         low=df_rt['low'], close=df_rt['close'], name='Prezzo'), row=1, col=1)
             
-            # Bande di Bollinger
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.3)', width=1), name='BB Upper'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.3)', width=1), fill='tonexty', name='BB Lower'), row=1, col=1)
+            # 2. Bande di Bollinger
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_up], line=dict(color='rgba(173, 216, 230, 0.4)', width=1), name='BBU'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_mid], line=dict(color='rgba(255, 255, 255, 0.3)', dash='dash', width=1), name='BBM'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], line=dict(color='rgba(173, 216, 230, 0.4)', width=1), name='BBL'), row=1, col=1)
             
-            # RSI
-            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='yellow'), name='RSI'), row=2, col=1)
+            # Riempimento tenue tra BBM e BBL
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt[c_low], fill='tonexty', 
+                                     fillcolor='rgba(173, 216, 230, 0.05)', line=dict(width=0), showlegend=False), row=1, col=1)
+            
+            # 3. RSI con Soglie
+            fig.add_trace(go.Scatter(x=df_rt.index, y=df_rt['rsi'], line=dict(color='#00ffcc', width=2), name='RSI'), row=2, col=1)
+            
+            # Linee Orizzontali RSI (70 Overbought, 30 Oversold)
+            fig.add_hline(y=70, line_dash="dash", line_color="red", line_width=1, row=2, col=1)
+            fig.add_hline(y=30, line_dash="dash", line_color="lime", line_width=1, row=2, col=1)
+            fig.update_yaxes(range=[0, 100], row=2, col=1)
 
-            # --- AGGIUNTA FRECCE SEGNALI (Dallo storico trade) ---
-            for trade in st.session_state['trades']:
-                # Mostriamo solo i segnali dell'asset attualmente visualizzato
-                if trade['Asset'] == pair:
-                    try:
-                        trade_time = pd.to_datetime(trade['Ora'], format='%H:%M:%S').replace(
-                            year=df_rt.index[-1].year, month=df_rt.index[-1].month, day=df_rt.index[-1].day
-                        ).tz_localize('Europe/Rome')
-
-                        color = "lime" if "CALL" in trade['Tipo'] else "red"
-                        symbol = "triangle-up" if "CALL" in trade['Tipo'] else "triangle-down"
-                        y_pos = df_rt.loc[trade_time, 'low'] * 0.9999 if "CALL" in trade['Tipo'] else df_rt.loc[trade_time, 'high'] * 1.0001
-                        
-                        fig.add_trace(go.Scatter(
-                            x=[trade_time], y=[y_pos],
-                            mode="markers",
-                            marker=dict(symbol=symbol, size=15, color=color, line=dict(width=2, color="white")),
-                            name=trade['Tipo']
-                        ), row=1, col=1)
-                    except: continue
-
-            # --- FORZATURA ZOOM 1 ORA E GRIGLIA ---
+            # --- ZOOM 1 ORA E GRIGLIA MINUTI ---
             ora_fine = df_rt.index[-1]
             ora_inizio = ora_fine - pd.Timedelta(minutes=60)
 
             fig.update_xaxes(
                 range=[ora_inizio, ora_fine],
-                type="date", # Forza il tipo data per lo zoom
-                dtick=60000, # Linea ogni minuto
+                type="date",
+                dtick=60000, # Un tick ogni minuto (60.000 ms)
                 gridcolor='rgba(255, 255, 255, 0.05)',
+                tickformat="%H:%M",
                 row=1, col=1
             )
 
-            # Linee verticali per ogni minuto
+            # Righe verticali per ogni minuto (attraversano entrambi i grafici)
             for t in df_rt.index:
                 if t >= ora_inizio:
-                    fig.add_vline(x=t, line_width=0.4, line_color="rgba(255,255,255,0.1)", row="all")
+                    fig.add_vline(x=t, line_width=0.5, line_color="rgba(255,255,255,0.1)", row="all")
 
-            fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False, showlegend=False)
+            fig.update_layout(height=700, template="plotly_dark", xaxis_rangeslider_visible=False, showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
             
     except Exception as e:
