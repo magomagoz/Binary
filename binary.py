@@ -546,7 +546,7 @@ with col_res1:
     st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
 with col_res2:
     sim_pnl = st.session_state.get('sim_pnl', 0.0)
-    stsubheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
+    st.subheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
