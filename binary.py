@@ -200,15 +200,33 @@ else:
     API = st.session_state['iq_api']
     
     # --- LOGICA SWITCH CONTO ---
+    # --- LOGICA SWITCH CONTO CON SICUREZZA ---
     col_p, col_r = st.sidebar.columns(2)
     
+    # Pulsante Practice (Sempre diretto)
     if col_p.button("🎮 PRACTICE", use_container_width=True):
         API.change_balance("PRACTICE")
-        st.toast("Passato a Conto Practice", icon="🎮")
+        st.session_state['confirm_real'] = False # Reset sicurezza
+        st.rerun()
         
+    # Pulsante Reale (Attiva la richiesta di conferma)
     if col_r.button("💰 REALE", use_container_width=True, type="primary"):
-        API.change_balance("REAL")
-        st.toast("ATTENZIONE: Passato a Conto REALE", icon="⚠️")
+        st.session_state['confirm_real'] = True
+
+    # --- POP-UP DI CONFERMA (Inline nella Sidebar) ---
+    if st.session_state.get('confirm_real', False):
+        st.sidebar.warning("⚠️ **SICURO DI PASSARE AL CONTO REALE?**")
+        c1, c2 = st.sidebar.columns(2)
+        
+        if c1.button("✅ SÌ, PROCEDI", use_container_width=True):
+            API.change_balance("REAL")
+            st.session_state['confirm_real'] = False
+            st.toast("OPERATIVITÀ REALE ATTIVATA!", icon="🔥")
+            st.rerun()
+            
+        if c2.button("❌ ANNULLA", use_container_width=True):
+            st.session_state['confirm_real'] = False
+            st.rerun()
 
     # --- LETTURA SALDO ---
     # L'API di IQ Option restituisce il saldo del conto attualmente attivo
