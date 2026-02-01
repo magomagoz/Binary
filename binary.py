@@ -368,16 +368,16 @@ paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, hel
 if not paper_trading and account_type == "REAL":
     st.sidebar.warning("⚡ OPERATIVITÀ REALE ATTIVA")
 
-st.sidebar.divider()
-st.sidebar.subheader("🛡️ Kill-Switch")
-if st.session_state['trading_attivo']:
-    if st.sidebar.button("🛑 STOP TOTALE", type="primary", use_container_width=True):
-        st.session_state['trading_attivo'] = False
-        st.rerun()
-else:
-    if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
-        st.session_state['trading_attivo'] = True
-        st.rerun()
+#st.sidebar.divider()
+#st.sidebar.subheader("🛡️ Kill-Switch")
+#if st.session_state['trading_attivo']:
+    #if st.sidebar.button("🛑 STOP TOTALE", type="primary", use_container_width=True):
+        #st.session_state['trading_attivo'] = False
+        #st.rerun()
+#else:
+    #if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
+        #st.session_state['trading_attivo'] = True
+        #st.rerun()
 
 # Da inserire in st.sidebar per un test rapido
 st.sidebar.markdown("---")
