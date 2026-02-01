@@ -621,7 +621,7 @@ else:
 
 # --- CURRENCY STRENGTH ---
 st.markdown("---")
-st.subheader("⚡ Forza delle valute (Dati IQ Option)")
+st.subheader("⚡ Forza delle valute")
 if st.session_state['iq_api']:
     s_data = get_iq_currency_strength(st.session_state['iq_api'])
     if not s_data.empty:
