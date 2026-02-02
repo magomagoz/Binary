@@ -531,12 +531,12 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     try:
                         # 1. TENTA L'ACQUISTO
                         success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
-                        
+                                           
                         if success:
                             st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
                             with st.spinner(f"⏳ Trade in corso su {asset}... Attendo 62s per l'esito."):
                                 time_lib.sleep(62) 
-                            
+
                             # Recupero esito
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
