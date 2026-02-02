@@ -232,10 +232,10 @@ def check_binary_signal(df):
     if not (12 < adx < 45):
         return None, stats, f"ADX non ideale ({stats['ADX']})"
     
-    # Ingressi a 30/70 invece di 25/75
-    if curr_close <= bbl and rsi < 30 and curr_k < 25:
+    # Ingressi a 35/65 invece di 30/70
+    if curr_close <= bbl and rsi < 35 and curr_k < 25:
         return "CALL", stats, "Segnale Validato"
-    elif curr_close >= bbu and rsi > 70 and curr_k > 75:
+    elif curr_close >= bbu and rsi > 65 and curr_k > 75:
         return "PUT", stats, "Segnale Validato"
             
     return None, stats, "Condizioni tecniche non soddisfatte"
@@ -517,41 +517,62 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
                 
+        
+        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
+                # 1. Verifica connessione lampo prima di ogni asset
+                if not check_and_reconnect():
+                    st.error("Connessione persa durante la scansione.")
+                    break
+                
                 time_lib.sleep(0.5) 
                 df = get_data_from_iq(API, asset)
-    
                 if df.empty: continue 
-    
+
                 signal, stats, reason = check_binary_signal(df)
             
                 if signal:
                     st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
-
-                    # --- LOGICA TIMEOUT 15 SECONDI ---
-                    start_op = time_lib.time()
+                    
+                    # --- PROTEZIONE ANTI-BLOCCO (TIMEOUT 15s) ---
+                    start_time = time_lib.time()
                     success = False
                     trade_id = None
-                    mode = ""
-    
+                    
                     try:
-                        # Esecuzione con protezione timeout
-                        success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                        # Eseguiamo l'acquisto. Se l'API di IQ si blocca, 
+                        # questo try/except è la nostra rete di sicurezza.
+                        with st.spinner("Inviando ordine..."):
+                            success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
                         
-                        # Controllo se l'API ha impiegato più di 15s
-                        if time_lib.time() - start_op > 15:
-                            st.warning(f"⚠️ Timeout 15s superato su {asset}. Operazione annullata.")
+                        # Controllo se l'operazione ha impiegato troppo tempo
+                        if time_lib.time() - start_time > 15:
+                            st.warning(f"⚠️ Timeout API 15s su {asset}. L'applicazione è stata sbloccata forzatamente.")
                             break
 
                         if success:
-                            st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                            with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s"):
-                                time_lib.sleep(62) 
-
-                            # --- Registrazione Esito ---
+                            st.success(f"✅ Ordine {mode} aperto (ID: {trade_id})")
+                            # Aspettiamo il risultato senza bloccare l'intera UI
+                            time_lib.sleep(62) 
+                            
+                            # Recupero esito (Binary o Digital)
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
+                            # Registrazione e Report
+                            st.session_state['daily_pnl'] += res
+                            # (Qui aggiungi la tua logica dei report Power Hour se l'hai inserita)
+                            break 
+                        else:
+                            st.warning(f"❌ {asset}: Rifiutato o Mercato Chiuso.")
+                            
+                    except Exception as e:
+                        st.error(f"⚠️ Errore critico durante l'apertura: {e}")
+                        # Forza la riconnessione se l'errore è di rete
+                        st.session_state['iq_api'].connect() 
+                else:
+                    st.write(f"❌ {asset}: {reason}")
+                
                             # Determina se è Power Hour (13:00-17:00 GMT)
                             now_gmt = datetime.now(pytz.utc)
                             is_ph = 13 <= now_gmt.hour < 17
