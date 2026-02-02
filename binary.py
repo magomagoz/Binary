@@ -404,7 +404,7 @@ if st.sidebar.button("🧪 Test Telegram"):
     
     st.sidebar.success("Messaggio inviato!")
 
-st.sidebar.subheader("🛠️ Test Trade (1€)")
+#st.sidebar.subheader("🛠️ Test Trade (1€)")
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
         with st.sidebar.status("Esecuzione test...", expanded=True) as status:
