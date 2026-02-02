@@ -611,13 +611,13 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                         else:
                             st.warning(f"⚠️ {asset}: Ordine rifiutato (Mercato chiuso o Payout basso).")
                             
-                    except Exception as e:
-                        st.error(f"❌ Errore esecuzione: {e}")
-                else:
-                    # Aggiornamento contatori scarti
-                    if "ADX" in reason: st.session_state['scarti_adx'] += 1
-                    elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
-                    st.write(f"❌ {asset}: {reason}")
+                except Exception as e:
+                    st.error(f"❌ Errore esecuzione: {e}")
+            else:
+                # Aggiornamento contatori scarti
+                if "ADX" in reason: st.session_state['scarti_adx'] += 1
+                elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
+                st.write(f"❌ {asset}: {reason}")
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
