@@ -508,45 +508,48 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 signal, stats, reason = check_binary_signal(df)
             
                 if signal:
-                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione in corso...")
+                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato! Tentativo di apertura...")
                     
                     try:
-                        # Esecuzione immediata
+                        # 1. TENTA L'ACQUISTO
                         success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
                         
                         if success:
-                            st.success(f"✅ Ordine inviato! ID: {trade_id}")
-                            # Aspettiamo il tempo della candela (60s) + 2s di tolleranza
-                            # NOTA: Usiamo un placeholder per non bloccare visivamente l'utente
-                            with st.spinner('Attendendo esito trade...'):
+                            st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
+                            with st.spinner(f'⏳ Trade in corso su {asset}... Attendo 62s per l'esito.'):
                                 time_lib.sleep(62) 
                             
                             # Recupero esito
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
-                            # Salvataggio nello stato
+                            # Registrazione
                             st.session_state['trades'].append({
                                 "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, 
-                                "Tipo": signal,
+                                "Asset": asset, "Tipo": signal,
                                 "Esito": "WIN" if res > 0 else "LOSS", 
-                                "Profitto": res,
-                                "RSI": stats.get('RSI', 0),
-                                "ADX": stats.get('ADX', 0)
+                                "Profitto": res, "RSI": stats.get('RSI', 0), "ADX": stats.get('ADX', 0)
                             })
                             st.session_state['daily_pnl'] += res
+                            send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
                             
-                            # Messaggio Telegram
-                            esito_txt = "✅ WIN" if res > 0 else "❌ LOSS"
-                            send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {esito_txt}\nProfitto: €{res:.2f}")
-                            
-                            # Invece di rerun immediato, usiamo un break per finire il ciclo pulito
+                            # Dopo un trade, usciamo dal ciclo per resettare la scansione pulita
                             break 
+                        
                         else:
-                            st.warning(f"⚠️ {asset}: Ordine rifiutato (Verifica disponibilità/payout)")
-                    
+                            # --- DIAGNOSTICA RIFIUTO ---
+                            # Controlliamo il payout attuale per capire se è quello il problema
+                            payout = "N/A"
+                            try:
+                                all_payouts = API.get_all_profit()
+                                asset_payout = all_payouts.get(asset, {}).get('binary', 0) * 100
+                                payout = f"{asset_payout}%"
+                            except: pass
+
+                            st.warning(f"⚠️ {asset}: Ordine rifiutato dall'API.")
+                            st.info(f"🧐 **Diagnostica:** Payout attuale: {payout}. Possibili cause: Asset chiuso, payout sotto soglia minima o troppe richieste simultanee.")
+                            
                     except Exception as e:
-                        st.error(f"❌ Errore durante l'esecuzione: {e}")
+                        st.error(f"❌ Errore critico esecuzione: {e}")
                 else:
                     # AGGIORNAMENTO SCARTI (Ora funzionerà)
                     if "ADX" in reason: 
