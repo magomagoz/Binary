@@ -51,12 +51,14 @@ if 'trading_attivo' not in st.session_state: st.session_state['trading_attivo'] 
 if 'signal_history' not in st.session_state: st.session_state['signal_history'] = pd.DataFrame()
 if 'sentinel_logs' not in st.session_state: st.session_state['sentinel_logs'] = []
 if 'last_scan_status' not in st.session_state: st.session_state['last_scan_status'] = "In attesa di connessione..."
-if 'sim_pnl' not in st.session_state: st.session_state['sim_pnl'] = 0.0
 if 'confirm_real' not in st.session_state: st.session_state['confirm_real'] = False
 if 'last_market_alert' not in st.session_state: 
     st.session_state['last_market_alert'] = ""
 if 'last_daily_report_date' not in st.session_state: 
     st.session_state['last_daily_report_date'] = None
+if 'scarti_adx' not in st.session_state: st.session_state['scarti_adx'] = 0
+if 'scarti_rsi_stoch' not in st.session_state: st.session_state['scarti_rsi_stoch'] = 0
+if 'scarti_forza' not in st.session_state: st.session_state['scarti_forza'] = 0
 
 # --- MAPPA ASSET ---
 asset_map = {
@@ -190,19 +192,15 @@ def detect_divergence(df):
 
 def check_binary_signal(df):
     if df.empty or len(df) < 200:
-        return None, {}
+        return None, {}, "Dati insufficienti"
 
-    # --- CALCOLO INDICATORI (TUTTO DENTRO LA FUNZIONE) ---
+    # --- CALCOLO INDICATORI ---
     bb = ta.bbands(df['close'], length=20, std=2.2)
     rsi_series = ta.rsi(df['close'], length=7)
     rsi = rsi_series.iloc[-1]
-    
     adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
     adx = adx_df['ADX_14'].iloc[-1]
-    atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
-    
     ema200 = ta.ema(df['close'], length=200).iloc[-1]
-    
     stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
     curr_stoch_k = stoch['STOCHk_14_3_3'].iloc[-1]
     
@@ -210,24 +208,18 @@ def check_binary_signal(df):
     bbu = bb.iloc[-1, 2]
     curr_close = df['close'].iloc[-1]
     
-    stats = {
-        "Price": curr_close,
-        "RSI": round(rsi, 2),
-        "ADX": round(adx, 2),
-        "ATR": round(atr, 5),
-        "EMA200": round(ema200, 5),
-        "Stoch_K": round(curr_stoch_k, 2),
-        "Trend": "UP" if curr_close > ema200 else "DOWN"
-    }
+    stats = {"Price": curr_close, "RSI": round(rsi, 2), "ADX": round(adx, 2), "Stoch_K": round(curr_stoch_k, 2)}
 
-    # --- LOGICA DI FILTRO ---
-    if 15 < adx < 35:
-        if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
-            return "CALL", stats
-        elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
-            return "PUT", stats
+    # --- LOGICA DI FILTRO CON MOTIVAZIONE ---
+    if not (15 < adx < 35):
+        return None, stats, f"ADX fuori range ({stats['ADX']})"
+    
+    if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
+        return "CALL", stats, "Segnale Validato"
+    elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
+        return "PUT", stats, "Segnale Validato"
             
-    return None, stats
+    return None, stats, "Condizioni tecniche non soddisfatte"
     
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -381,24 +373,29 @@ stake = st.sidebar.number_input("Stake Singolo (€)", value=20.0)
 target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
-#st.sidebar.divider()
-#st.sidebar.subheader("🧪 Modalità Test")
-#paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
+st.sidebar.divider()
+st.sidebar.subheader("🛡️ Report Filtri (Scarti)")
+with st.sidebar.expander("Dettaglio Scarti", expanded=True):
+    st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
+    st.write(f"🖇️ **RSI/Stoch no:** {st.session_state['scarti_rsi_stoch']}")
+    st.write(f"💪 **Forza debole:** {st.session_state['scarti_forza']}")
 
-# Forza la simulazione se il saldo è REAL ma l'utente ha dimenticato il toggle su ON
-#if not paper_trading and account_type == "REAL":
-    #st.sidebar.warning("⚡ OPERATIVITÀ REALE ATTIVA")
+    if st.button("Reset Statistiche Scarto"):
+        st.session_state['scarti_adx'] = 0
+        st.session_state['scarti_rsi_stoch'] = 0
+        st.session_state['scarti_forza'] = 0
+        st.rerun()
 
-#st.sidebar.divider()
-#st.sidebar.subheader("🛡️ Kill-Switch")
-#if st.session_state['trading_attivo']:
-    #if st.sidebar.button("🛑 STOP TOTALE", type="primary", use_container_width=True):
-        #st.session_state['trading_attivo'] = False
-        #st.rerun()
-#else:
-    #if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
-        #st.session_state['trading_attivo'] = True
-        #st.rerun()
+st.sidebar.divider()
+st.sidebar.subheader("🛡️ Kill-Switch")
+if st.session_state['trading_attivo']:
+    if st.sidebar.button("🛑 STOP TOTALE", type="primary", use_container_width=True):
+        st.session_state['trading_attivo'] = False
+        st.rerun()
+else:
+    if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
+        st.session_state['trading_attivo'] = True
+        st.rerun()
 
 # Da inserire in st.sidebar per un test rapido
 st.sidebar.markdown("---")
@@ -415,7 +412,6 @@ with st.sidebar.popover("🗑️ **Reset Cronologia**"):
     if st.button("SÌ, CANCELLA ORA"):
         st.session_state['trades'] = []
         st.session_state['daily_pnl'] = 0.0
-        st.session_state['sim_pnl'] = 0.0
         st.rerun()
 
 # --- MAIN INTERFACE ---
@@ -461,61 +457,47 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
 
         currency_strength = get_iq_currency_strength(API) # Calcolo forza valute globale
         
-        with st.status("🔍 Scansione Sentinel in corso...", expanded=False) as status:
+        with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 df = get_data_from_iq(API, asset)
                 if not df.empty:
-                    df['rsi'] = ta.rsi(df['close'], length=14) 
+                    signal, stats, reason = check_binary_signal(df)
                     
-                    # 1. Analisi Divergenza
-                    div_status = detect_divergence(df)
-                    if div_status != "NESSUNA" and div_status != "N/A":
-                        last_div_key = f"last_div_{asset}"
-                        if st.session_state.get(last_div_key) != div_status:
-                            #send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
-                            st.session_state[last_div_key] = div_status
-    
-                    # 2. Segnale Tecnico (BB + RSI + Stoch)
-                    signal, stats = check_binary_signal(df)
+
                     
+                    # --- LOGICA DI ESECUZIONE PULITA ---
                     if signal:
-                        # 3. FILTRO FORZA VALUTA (Check finale prima di operare)
+                        # Controlliamo il filtro finale della Forza Valuta
                         if is_strength_valid(asset, currency_strength, threshold=0.15):
-                            msg_sent = f"🚀 *SEGNALE VALIDATO: {signal}* su {asset}"
-                            send_telegram_msg(msg_sent)
+                            st.write(f"🚀 **{asset}**: Segnale VALIDATO! Invio ordine...")
+                            send_telegram_msg(f"🚀 *SEGNALE VALIDATO: {signal}* su {asset}")
                             
-                            if paper_trading:
-                                st.info(f"🧪 [SIM] Analisi {signal} su {asset}")
-                                time_lib.sleep(60) # Aspetta scadenza candela
-                                df_post = get_data_from_iq(API, asset)
-                                if not df_post.empty:
-                                    price_end = df_post['close'].iloc[-1]
-                                    win = price_end > stats["Price"] if signal == "CALL" else price_end < stats["Price"]
-                                    res = (stake * 0.85) if win else -stake
-                                    st.session_state['trades'].append({
-                                        "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": f"SIM-{signal}",
-                                        "Esito": "WIN" if win else "LOSS", "Profitto": res, 
-                                        "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
-                                        "ATR": stats["ATR"], "Trend": stats["Trend"]
-                                    })
-                                    st.session_state['sim_pnl'] += res
-                                    st.rerun()
+                            # ESECUZIONE DIRETTA (L'API userà il conto selezionato: Practice o Real)
+                            check, id = API.buy(stake, asset, signal.lower(), 1)
+                            
+                            if check:
+                                time_lib.sleep(62) # Attesa scadenza
+                                res = API.check_win_v2(id)
+                                st.session_state['trades'].append({
+                                    "Ora": get_now_rome().strftime("%H:%M:%S"), 
+                                    "Asset": asset, 
+                                    "Tipo": signal,
+                                    "Esito": "WIN" if res > 0 else "LOSS", 
+                                    "Profitto": res, 
+                                    "RSI": stats["RSI"], 
+                                    "ADX": stats["ADX"], 
+                                    "Stoch": stats["Stoch_K"],
+                                    "ATR": stats["ATR"], 
+                                    "Trend": stats["Trend"]
+                                })
+                                st.session_state['daily_pnl'] += res
+                                st.rerun()
                             else:
-                                # TRADING REALE
-                                check, id = API.buy(stake, asset, signal.lower(), 1)
-                                if check:
-                                    time_lib.sleep(62)
-                                    res = API.check_win_v2(id)
-                                    st.session_state['trades'].append({
-                                        "Ora": get_now_rome().strftime("%H:%M:%S"), "Asset": asset, "Tipo": signal,
-                                        "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res, 
-                                        "RSI": stats["RSI"], "ADX": stats["ADX"], "Stoch": stats["Stoch_K"],
-                                        "ATR": stats["ATR"], "Trend": stats["Trend"]
-                                    })
-                                    st.session_state['daily_pnl'] += res
-                                    st.rerun()
+                                st.error(f"Errore nell'invio dell'ordine per {asset}")
                         else:
-                            st.write(f"⏭️ {asset}: Segnale presente ma Forza Valuta non valida.")
+                            st.session_state['scarti_forza'] += 1
+                            st.write(f"⏭️ {asset}: Forza Valuta debole.")
+
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
