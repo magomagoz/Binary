@@ -323,6 +323,35 @@ else:
         st.rerun()
 
 st.sidebar.divider()
+st.sidebar.subheader("🛠️ Debug & Test")
+
+if st.session_state['iq_api']:
+    if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
+        with st.sidebar.status("Esecuzione test...", expanded=False) as status:
+            # 1. Forza il conto Practice per sicurezza
+            st.session_state['iq_api'].change_balance("PRACTICE")
+            
+            # 2. Tenta un acquisto CALL su EURUSD (scadenza 1 min)
+            check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
+            
+            if check:
+                st.sidebar.success(f"✅ Test Riuscito! ID: {id}")
+                st.balloons()
+                # Registriamo il trade nel log per vederlo nella tabella
+                st.session_state['trades'].append({
+                    "Ora": get_now_rome().strftime("%H:%M:%S"),
+                    "Asset": "EURUSD (TEST)",
+                    "Tipo": "CALL",
+                    "Esito": "TEST",
+                    "Profitto": 0.0,
+                    "RSI": 0, "ADX": 0, "Stoch": 0, "ATR": 0, "Trend": "TEST"
+                })
+            else:
+                st.sidebar.error("❌ Test Fallito: controlla i log dell'API.")
+else:
+    st.sidebar.warning("Connetti l'API per testare.")
+
+st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
 
 status_data = get_session_status()
