@@ -525,35 +525,42 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 if signal:
                     st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
                     
-                    # Esecuzione UNICA con smart_buy
-                    success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
-                    
+                    # 1. TENTA L'ACQUISTO
+                    try:
+                        success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                    except Exception as e:
+                        st.error(f"❌ Errore tecnico durante smart_buy: {e}")
+                        success = False
+
                     if success:
                         st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
+                        # Notifica Telegram opzionale
                         send_telegram_msg(f"🔔 *ORDINE APERTO*\nAsset: {asset}\nTipo: {signal}\nModo: {mode}")
                         
-                        time_lib.sleep(62) # Attesa scadenza
+                        # 2. ATTESA SCADENZA (Mentre aspetti, il bot non deve bloccarsi)
+                        time_lib.sleep(62) 
                         
-                        # Recupero esito corretto in base al modo
-                        res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
-                        
-                        # Salvataggio trade
-                        st.session_state['trades'].append({
-                            "Ora": get_now_rome().strftime("%H:%M"),
-                            "Asset": asset, "Tipo": signal,
-                            "Esito": "WIN" if res > 0 else "LOSS", 
-                            "Profitto": res, "RSI": stats['RSI'], "ADX": stats['ADX']
-                        })
-                        st.session_state['daily_pnl'] += res
-                        st.rerun()
+                        # 3. RECUPERO ESITO
+                        try:
+                            res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
+                            
+                            # Registrazione nello storico
+                            st.session_state['trades'].append({
+                                "Ora": get_now_rome().strftime("%H:%M"),
+                                "Asset": asset, 
+                                "Tipo": signal,
+                                "Esito": "WIN" if res > 0 else "LOSS", 
+                                "Profitto": res,
+                                "RSI": stats.get('RSI', 0),
+                                "ADX": stats.get('ADX', 0)
+                            })
+                            st.session_state['daily_pnl'] += res
+                            st.rerun() # Forza il refresh per mostrare il trade in tabella
+                        except Exception as e:
+                            st.error(f"⚠️ Errore nel recupero esito: {e}")
                     else:
-                        st.error(f"❌ {asset}: Rifiutato (Mercato chiuso o Payout basso)")
-                else:
-                    # Registrazione scarti
-                    if "ADX" in reason: st.session_state['scarti_adx'] += 1
-                    elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
-                    st.write(f"❌ {asset}: {reason}")
- 
+                        st.warning(f"❌ {asset}: Ordine rifiutato dall'API (Mercato chiuso o payout basso).")
+                        # Non bloccare, continua con il prossimo asset 
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
@@ -691,26 +698,6 @@ if st.session_state['iq_api']:
 else:
     st.info("In attesa della connessione...")
 
-#--- REPORTING ---
-st.divider()
-st.subheader("📊 Storico Operazioni Sessione")
-if st.session_state['trades']:
-    st.table(pd.DataFrame(st.session_state['trades']))
-else:
-    st.info("Nessuna operazione eseguita in questa sessione.")
-
-col_res1, col_res2 = st.columns(2)
-with col_res1:
-    st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
-
-if st.session_state['trades']:
-    st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
-
-# Auto-refresh ogni 60s
-#st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; border-radius:10px; overflow:hidden;"><div style="background:red; height:100%; width:100%; animation: fill 60s linear infinite;"></div></div><style>@keyframes fill {0% {width: 0%;} 100% {width: 100%;}}</style>""", unsafe_allow_html=True)
-time_lib.sleep(60)
-st.rerun()
-
 # --- SEZIONE ANALISI TECNICA POST-SESSIONE ---
 st.markdown("---")
 st.subheader("🔬 Analisi prestazioni")
@@ -744,3 +731,33 @@ if st.session_state['trades']:
     st.download_button("📥 SCARICA REPORT (.csv)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
 else:
     st.info("⏳ In attesa di dati per l'analisi")
+
+# --- SEZIONE REPORTING IN FONDO AL SCRIPT ---
+st.divider()
+st.subheader("📊 Storico Operazioni Sessione")
+
+if st.session_state['trades']:
+    # Trasforma la lista in DataFrame per una visualizzazione pulita
+    df_history = pd.DataFrame(st.session_state['trades'])
+    # Mostra la tabella
+    st.dataframe(df_history, use_container_width=True)
+    
+    # Mostra il totale
+    st.metric("Profitto Totale Sessione", f"€ {st.session_state['daily_pnl']:.2f}")
+else:
+    st.info("🟡 In attesa del primo trade... La scansione è attiva.")
+
+col_res1, col_res2 = st.columns(2)
+with col_res1:
+    st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
+
+if st.session_state['trades']:
+    st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
+
+# Auto-refresh ogni 60s
+#st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; border-radius:10px; overflow:hidden;"><div style="background:red; height:100%; width:100%; animation: fill 60s linear infinite;"></div></div><style>@keyframes fill {0% {width: 0%;} 100% {width: 100%;}}</style>""", unsafe_allow_html=True)
+time_lib.sleep(60)
+st.rerun()
+
+
+
