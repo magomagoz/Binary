@@ -360,13 +360,13 @@ stake = st.sidebar.number_input("Stake Singolo (€)", value=20.0)
 target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
-st.sidebar.divider()
-st.sidebar.subheader("🧪 Modalità Test")
-paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
+#st.sidebar.divider()
+#st.sidebar.subheader("🧪 Modalità Test")
+#paper_trading = st.sidebar.toggle("Simulazione (Paper Trading)", value=True, help="Se attivo, il bot analizza i segnali ma non apre trade reali su IQ Option.")
 
 # Forza la simulazione se il saldo è REAL ma l'utente ha dimenticato il toggle su ON
-if not paper_trading and account_type == "REAL":
-    st.sidebar.warning("⚡ OPERATIVITÀ REALE ATTIVA")
+#if not paper_trading and account_type == "REAL":
+    #st.sidebar.warning("⚡ OPERATIVITÀ REALE ATTIVA")
 
 #st.sidebar.divider()
 #st.sidebar.subheader("🛡️ Kill-Switch")
@@ -451,7 +451,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     if div_status != "NESSUNA" and div_status != "N/A":
                         last_div_key = f"last_div_{asset}"
                         if st.session_state.get(last_div_key) != div_status:
-                            send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
+                            #send_telegram_msg(f"⚠️ *DIVERGENZA su {asset}*\nTipo: {div_status}")
                             st.session_state[last_div_key] = div_status
     
                     # 2. Segnale Tecnico (BB + RSI + Stoch)
