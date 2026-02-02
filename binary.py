@@ -416,16 +416,24 @@ with st.sidebar.expander("Dettaglio Scarti", expanded=True):
         st.session_state['scarti_forza'] = 0
         st.rerun()
 
-    # --- PUNTO 5: SEMAFORO E PAYOUT ---
-    st.sidebar.divider()
-    
-    # Controllo stato per il semaforo
-    is_alive = API.check_connect()
-    semaforo = "🟢 API OPERATIVA" if is_alive else "🔴 API OFFLINE"
-    st.sidebar.subheader(semaforo)
-    
-    st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
-    st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
+st.sidebar.divider()
+st.sidebar.subheader("📡 Stato Sistema")
+
+if st.session_state.get('iq_api'):
+    API_ST = st.session_state['iq_api']
+    # --- PUNTO 5: SEMAFORO REATTIVO ---
+    if API_ST.check_connect():
+        st.sidebar.markdown("### 🟢 API OPERATIVA")
+        mode = API_ST.get_balance_mode()
+        st.sidebar.caption(f"✅ Connesso in modalità: **{mode}**")
+    else:
+        st.sidebar.markdown("### 🔴 API OFFLINE")
+        st.sidebar.warning("Tentativo di riconnessione automatico al prossimo scan...")
+else:
+    st.sidebar.markdown("### ⚪ NON CONNESSO")
+
+st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -496,19 +504,20 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 st.session_state['trading_attivo'] = False
                 st.rerun()
 
-        # --- CONTROLLO STATO MERCATI ---
+        # --- CONTROLLO WEEKEND ---
         is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
-        
         if is_weekend:
-            st.error("📉 MERCATI CHIUSI (WEEKEND). Il bot non scansionerà asset reali per evitare rischi OTC")
+            st.error("📉 MERCATI CHIUSI. Il bot non scansiona asset reali nel weekend.")
             st.session_state['trading_attivo'] = False
+            st.stop()
         
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
-
-        currency_strength = get_iq_currency_strength(API) # Calcolo forza valute globale
                 
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
+                # --- PUNTO 2: PAUSA ANTI-BAN ---
+                time_lib.sleep(0.5) 
+
                 df = get_data_from_iq(API, asset)
     
                 # --- PUNTO 3: PROTEZIONE DATI ---
@@ -516,49 +525,39 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     st.write(f"⚠️ {asset}: Dati insufficienti. Salto...")
                     continue 
 
-                if not df.empty:
-                    signal, stats, reason = check_binary_signal(df)
-                    time_lib.sleep(0.5) 
-                
-                    if signal:
-                        st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
-                        # Usiamo smart_buy invece di API.buy
-                        check, id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                signal, stats, reason = check_binary_signal(df)
+            
+                if signal:
+                    st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
+                    
+                    # Esecuzione UNICA con smart_buy
+                    success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                    
+                    if success:
+                        st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
+                        send_telegram_msg(f"🔔 *ORDINE APERTO*\nAsset: {asset}\nTipo: {signal}\nModo: {mode}")
                         
-                        if check:
-                            st.success(f"✅ Ordine inviato in modalità: {mode}")
-                            time_lib.sleep(62)
-                            
-                            # Recupero risultato in base alla modalità
-                            if mode == "Binary":
-                                res = API.check_win_v2(id)
-                            else:
-                                # Per Digital il recupero è leggermente diverso
-                                res = API.get_digital_prox_result(id)
-                                   
-                        if not check:
-                            # Prova a recuperare il motivo del rifiuto se l'API lo fornisce
-                            st.sidebar.error(f"Nota tecnica: {asset} potrebbe non essere disponibile come 'Binary' ora.")
+                        time_lib.sleep(62) # Attesa scadenza
                         
-                        if check:
-                            time_lib.sleep(62) # Attesa scadenza
-                            res = API.check_win_v2(id)
-                            st.session_state['trades'].append({
-                                "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, "Tipo": signal,
-                                "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res
-                            })
-                            st.session_state['daily_pnl'] += res
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {asset}: API ha rifiutato l'ordine. (Verifica disponibilità)")
+                        # Recupero esito corretto in base al modo
+                        res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
+                        
+                        # Salvataggio trade
+                        st.session_state['trades'].append({
+                            "Ora": get_now_rome().strftime("%H:%M"),
+                            "Asset": asset, "Tipo": signal,
+                            "Esito": "WIN" if res > 0 else "LOSS", 
+                            "Profitto": res, "RSI": stats['RSI'], "ADX": stats['ADX']
+                        })
+                        st.session_state['daily_pnl'] += res
+                        st.rerun()
                     else:
-                        # REGISTRAZIONE DELLO SCARTO
-                        if "ADX" in reason:
-                            st.session_state['scarti_adx'] += 1
-                        elif "Condizioni tecniche" in reason:
-                            st.session_state['scarti_rsi_stoch'] += 1
-                        st.write(f"❌ {asset}: {reason}")
+                        st.error(f"❌ {asset}: Rifiutato (Mercato chiuso o Payout basso)")
+                else:
+                    # Registrazione scarti
+                    if "ADX" in reason: st.session_state['scarti_adx'] += 1
+                    elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
+                    st.write(f"❌ {asset}: {reason}")
  
 else:
     if not st.session_state['iq_api']:
@@ -703,7 +702,7 @@ st.divider()
 
 col_res1, col_res2 = st.columns(2)
 with col_res1:
-    st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
+    st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
