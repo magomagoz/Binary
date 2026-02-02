@@ -438,42 +438,6 @@ if st.sidebar.button("🧪 Test Telegram"):
     
     st.sidebar.success("Messaggio inviato!")
 
-#st.sidebar.subheader("🛠️ Test Trade (1€)")
-if st.session_state['iq_api']:
-    if st.sidebar.button("🧪 Esegui Test Smart (€1)", use_container_width=True, type="secondary"):
-        with st.sidebar.status("Esecuzione test (Timeout 30s)...", expanded=True) as status:
-            try:
-                st.session_state['iq_api'].change_balance("PRACTICE")
-                
-                # Definiamo il test con un timer di sicurezza
-                start_test = time_lib.time()
-                success = False
-                mode = ""
-                
-                # Tenta l'acquisto
-                test_asset = "EURUSD"
-                success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
-                
-                # Se fallisce il primo, prova l'OTC immediatamente
-                if not success:
-                    test_asset = "EURUSD-OTC"
-                    success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
-
-                # Controllo tempo trascorso
-                if time_lib.time() - start_test > 30:
-                    status.update(label="⚠️ Timeout 30s raggiunto", state="error")
-                    st.sidebar.warning("L'API è troppo lenta. Riprova tra un istante.")
-                elif success:
-                    status.update(label=f"✅ Test OK! ({mode})", state="complete")
-                    st.sidebar.success(f"Aperto: {test_asset} ({mode})")
-                else:
-                    status.update(label="❌ Mercato Chiuso", state="error")
-                    st.sidebar.error("Nessun asset disponibile al momento.")
-                    
-            except Exception as e:
-                status.update(label="❌ Errore API", state="error")
-                st.sidebar.error(f"Dettaglio: {e}")
-
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
 if st.session_state['trading_attivo']:
