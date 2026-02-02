@@ -573,21 +573,21 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 else:
                     st.write(f"❌ {asset}: {reason}")
                 
-                        # Determina se è Power Hour (13:00-17:00 GMT)
-                        now_gmt = datetime.now(pytz.utc)
-                        is_ph = 13 <= now_gmt.hour < 17
+                    # Determina se è Power Hour (13:00-17:00 GMT)
+                    now_gmt = datetime.now(pytz.utc)
+                    is_ph = 13 <= now_gmt.hour < 17
                             
-                        # Salvataggio dati estesi
-                        st.session_state['trades'].append({
-                            "Ora": get_now_rome().strftime("%H:%M"),
-                            "Asset": asset, 
-                            "Tipo": signal,
-                            "Esito": "WIN" if res > 0 else "LOSS", 
-                            "Profitto": res,
-                            "Sessione": "🔥 Power Hour" if is_ph else "☕ Normal",
-                            "RSI": stats.get('RSI', 0), 
-                            "ADX": stats.get('ADX', 0)
-                        })
+                    # Salvataggio dati estesi
+                    st.session_state['trades'].append({
+                        "Ora": get_now_rome().strftime("%H:%M"),
+                        "Asset": asset, 
+                        "Tipo": signal,
+                        "Esito": "WIN" if res > 0 else "LOSS", 
+                        "Profitto": res,
+                        "Sessione": "🔥 Power Hour" if is_ph else "☕ Normal",
+                        "RSI": stats.get('RSI', 0), 
+                        "ADX": stats.get('ADX', 0)
+                    })
                         
                             # Aggiornamento PnL specifico
                             if is_ph:
