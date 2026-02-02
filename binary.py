@@ -774,6 +774,7 @@ if st.session_state['trades']:
 else:
     st.info("⏳ In attesa di dati per l'analisi")
 
+st.markdown("---")
 st.subheader("⚔️ Power Hour Challenge")
 col_ph, col_norm = st.columns(2)
 
@@ -794,7 +795,7 @@ with col_norm:
         st.caption(f"Win Rate: {wr_norm:.1f}%")
 
 # --- SEZIONE REPORTING FINALE ---
-st.divider()
+st.markdown("---")
 st.subheader("📊 Riepilogo Operazioni")
 
 if st.session_state['trades']:
