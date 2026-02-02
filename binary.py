@@ -433,7 +433,7 @@ else:
     st.sidebar.markdown("### ⚪ NON CONNESSO")
 
 st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
-st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
+#st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
