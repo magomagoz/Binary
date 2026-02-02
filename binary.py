@@ -191,32 +191,33 @@ def detect_divergence(df):
         return "N/A"
 
 def check_binary_signal(df):
-    if df.empty or len(df) < 200:
+    if df.empty or len(df) < 60:
         return None, {}, "Dati insufficienti"
 
-    # --- CALCOLO INDICATORI ---
-    bb = ta.bbands(df['close'], length=20, std=2.2)
-    rsi_series = ta.rsi(df['close'], length=7)
-    rsi = rsi_series.iloc[-1]
+    # --- INDICATORI ---
+    # Bollinger più strette (std 2.0) e RSI più reattivo (30/70)
+    bb = ta.bbands(df['close'], length=20, std=2.0)
+    rsi = ta.rsi(df['close'], length=7).iloc[-1]
     adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
     adx = adx_df['ADX_14'].iloc[-1]
-    ema200 = ta.ema(df['close'], length=200).iloc[-1]
     stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
-    curr_stoch_k = stoch['STOCHk_14_3_3'].iloc[-1]
+    curr_k = stoch['STOCHk_14_3_3'].iloc[-1]
     
     bbl = bb.iloc[-1, 0]
     bbu = bb.iloc[-1, 2]
     curr_close = df['close'].iloc[-1]
     
-    stats = {"Price": curr_close, "RSI": round(rsi, 2), "ADX": round(adx, 2), "Stoch_K": round(curr_stoch_k, 2)}
+    stats = {"Price": curr_close, "RSI": round(rsi, 2), "ADX": round(adx, 2), "Stoch": round(curr_k, 2)}
 
-    # --- LOGICA DI FILTRO CON MOTIVAZIONE ---
-    if not (15 < adx < 35):
-        return None, stats, f"ADX fuori range ({stats['ADX']})"
+    # --- LOGICA FILTRI ALLENTATA ---
+    # Accettiamo volatilità tra 12 e 45 (prima era 15-35)
+    if not (12 < adx < 45):
+        return None, stats, f"ADX non ideale ({stats['ADX']})"
     
-    if curr_close <= bbl and rsi < 25 and curr_stoch_k < 20:
+    # Ingressi a 30/70 invece di 25/75
+    if curr_close <= bbl and rsi < 30 and curr_k < 25:
         return "CALL", stats, "Segnale Validato"
-    elif curr_close >= bbu and rsi > 75 and curr_stoch_k > 80:
+    elif curr_close >= bbu and rsi > 70 and curr_k > 75:
         return "PUT", stats, "Segnale Validato"
             
     return None, stats, "Condizioni tecniche non soddisfatte"
@@ -317,8 +318,6 @@ else:
 st.sidebar.divider()
 st.sidebar.subheader("🛠️ Debug & Test")
 
-
-
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
         with st.sidebar.status("Esecuzione test...", expanded=True) as status:
@@ -329,17 +328,15 @@ if st.session_state['iq_api']:
             st.session_state['iq_api'].change_balance("PRACTICE")
             time_lib.sleep(1) # Piccolo delay per il cambio balance
             
-            # Tenta l'acquisto
+            # Tenta l'acquisto di test
             check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
             
             if check:
                 status.update(label="✅ Test Riuscito!", state="complete")
-                st.sidebar.success(f"ID Ordine: {id}")
-                st.balloons()
             else:
                 status.update(label="❌ Errore API", state="error")
-                # Mostriamo l'errore specifico se possibile
-                st.sidebar.error("L'API ha rifiutato l'ordine. Verifica che i mercati non siano in pausa tecnica.")
+                # Messaggio diagnostico
+                st.sidebar.warning("Suggerimento: Se è weekend, scrivi 'EURUSD-OTC' nel codice del test.")
 
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
@@ -376,7 +373,10 @@ target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
 st.sidebar.divider()
-st.sidebar.subheader("🛡️ Report Filtri (Scarti)")
+st.sidebar.subheader("📊 Report Filtri (Scarti)")
+c1, c2 = st.sidebar.columns(2)
+c1.metric("ADX No", st.session_state['scarti_adx'])
+c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
     st.write(f"🖇️ **RSI/Stoch centrali:** {st.session_state['scarti_rsi_stoch']}")
@@ -458,48 +458,38 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
 
         currency_strength = get_iq_currency_strength(API) # Calcolo forza valute globale
-        
+                
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 df = get_data_from_iq(API, asset)
                 if not df.empty:
                     signal, stats, reason = check_binary_signal(df)
                     
-
-                    
-                    # --- LOGICA DI ESECUZIONE PULITA ---
                     if signal:
-                        # Controlliamo il filtro finale della Forza Valuta
-                        if is_strength_valid(asset, currency_strength, threshold=0.15):
-                            st.write(f"🚀 **{asset}**: Segnale VALIDATO! Invio ordine...")
-                            send_telegram_msg(f"🚀 *SEGNALE VALIDATO: {signal}* su {asset}")
-                            
-                            # ESECUZIONE DIRETTA (L'API userà il conto selezionato: Practice o Real)
-                            check, id = API.buy(stake, asset, signal.lower(), 1)
-                            
-                            if check:
-                                time_lib.sleep(62) # Attesa scadenza
-                                res = API.check_win_v2(id)
-                                st.session_state['trades'].append({
-                                    "Ora": get_now_rome().strftime("%H:%M:%S"), 
-                                    "Asset": asset, 
-                                    "Tipo": signal,
-                                    "Esito": "WIN" if res > 0 else "LOSS", 
-                                    "Profitto": res, 
-                                    "RSI": stats["RSI"], 
-                                    "ADX": stats["ADX"], 
-                                    "Stoch": stats["Stoch_K"],
-                                    "ATR": stats["ATR"], 
-                                    "Trend": stats["Trend"]
-                                })
-                                st.session_state['daily_pnl'] += res
-                                st.rerun()
-                            else:
-                                st.error(f"Errore nell'invio dell'ordine per {asset}")
+                        # Se c'è un segnale, proviamo l'acquisto immediato
+                        st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Eseguo...")
+                        check, id = API.buy(stake, asset, signal.lower(), 1)
+                        
+                        if check:
+                            time_lib.sleep(62) # Attesa scadenza
+                            res = API.check_win_v2(id)
+                            st.session_state['trades'].append({
+                                "Ora": get_now_rome().strftime("%H:%M"),
+                                "Asset": asset, "Tipo": signal,
+                                "Esito": "WIN" if res > 0 else "LOSS", "Profitto": res
+                            })
+                            st.session_state['daily_pnl'] += res
+                            st.rerun()
                         else:
-                            st.session_state['scarti_forza'] += 1
-                            st.write(f"⏭️ {asset}: Forza Valuta debole.")
-
+                            st.error(f"❌ {asset}: API ha rifiutato l'ordine. (Verifica disponibilità)")
+                    else:
+                        # REGISTRAZIONE DELLO SCARTO
+                        if "ADX" in reason:
+                            st.session_state['scarti_adx'] += 1
+                        elif "Condizioni tecniche" in reason:
+                            st.session_state['scarti_rsi_stoch'] += 1
+                        st.write(f"❌ {asset}: {reason}")
+ 
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
@@ -644,9 +634,6 @@ st.divider()
 col_res1, col_res2 = st.columns(2)
 with col_res1:
     st.subheader(f"💰 Profitto Reale: € {st.session_state['daily_pnl']:.2f}")
-with col_res2:
-    sim_pnl = st.session_state.get('sim_pnl', 0.0)
-    st.subheader(f"🧪 Profitto Simulato: € {sim_pnl:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
