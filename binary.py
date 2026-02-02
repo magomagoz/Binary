@@ -508,27 +508,45 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 signal, stats, reason = check_binary_signal(df)
             
                 if signal:
-                    st.write(f"🚀 **{asset}**: Segnale {signal} trovato!")
+                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione in corso...")
+                    
                     try:
+                        # Esecuzione immediata
                         success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                        
                         if success:
-                            st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                            send_telegram_msg(f"🔔 *ORDINE APERTO*\nAsset: {asset}\nTipo: {signal}")
-                            time_lib.sleep(62) 
+                            st.success(f"✅ Ordine inviato! ID: {trade_id}")
+                            # Aspettiamo il tempo della candela (60s) + 2s di tolleranza
+                            # NOTA: Usiamo un placeholder per non bloccare visivamente l'utente
+                            with st.spinner('Attendendo esito trade...'):
+                                time_lib.sleep(62) 
+                            
+                            # Recupero esito
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
+                            # Salvataggio nello stato
                             st.session_state['trades'].append({
                                 "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, "Tipo": signal,
+                                "Asset": asset, 
+                                "Tipo": signal,
                                 "Esito": "WIN" if res > 0 else "LOSS", 
-                                "Profitto": res, "RSI": stats.get('RSI', 0), "ADX": stats.get('ADX', 0)
+                                "Profitto": res,
+                                "RSI": stats.get('RSI', 0),
+                                "ADX": stats.get('ADX', 0)
                             })
                             st.session_state['daily_pnl'] += res
-                            st.rerun()
+                            
+                            # Messaggio Telegram
+                            esito_txt = "✅ WIN" if res > 0 else "❌ LOSS"
+                            send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {esito_txt}\nProfitto: €{res:.2f}")
+                            
+                            # Invece di rerun immediato, usiamo un break per finire il ciclo pulito
+                            break 
                         else:
-                            st.warning(f"❌ {asset}: Payout basso o Asset chiuso.")
+                            st.warning(f"⚠️ {asset}: Ordine rifiutato (Verifica disponibilità/payout)")
+                    
                     except Exception as e:
-                        st.error(f"Errore esecuzione: {e}")
+                        st.error(f"❌ Errore durante l'esecuzione: {e}")
                 else:
                     # AGGIORNAMENTO SCARTI (Ora funzionerà)
                     if "ADX" in reason: 
