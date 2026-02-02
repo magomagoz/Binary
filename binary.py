@@ -365,6 +365,24 @@ target_profit = st.sidebar.number_input("Target Profit (€)", value=40.0)
 stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
 st.sidebar.divider()
+st.sidebar.subheader("🛡️ Protezione Strategia")
+
+# Calcolo trade mancanti per l'attivazione del Kill-Switch
+trade_effettuati = len(st.session_state['trades'])
+trade_minimi = 10
+
+if trade_effettuati < trade_minimi:
+    mancanti = trade_minimi - trade_effettuati
+    st.sidebar.info(f"⏳ Analisi WR attiva tra: **{mancanti} trade**")
+    st.sidebar.progress(trade_effettuati / trade_minimi)
+else:
+    st.sidebar.success("✅ Monitoraggio WR Attivo")
+    # Mostra il WR attuale anche qui per comodità
+    wins = len([t for t in st.session_state['trades'] if t['Esito'] == 'WIN'])
+    wr_real = (wins / trade_effettuati) * 100
+    st.sidebar.metric("Win Rate Sessione", f"{wr_real:.1f}%")
+
+st.sidebar.divider()
 st.sidebar.subheader("📊 Report Filtri (Scarti)")
 #c1, c2 = st.sidebar.columns(2)
 #c1.metric("ADX ", st.session_state['scarti_adx'])
@@ -516,7 +534,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                         
                         if success:
                             st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                            with st.spinner(f'⏳ Trade in corso su {asset}... Attendo 62s per l'esito.'):
+                            with st.spinner(f"⏳ Trade in corso su {asset}... Attendo 62s per l'esito."):
                                 time_lib.sleep(62) 
                             
                             # Recupero esito
@@ -531,6 +549,23 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             })
                             st.session_state['daily_pnl'] += res
                             send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
+
+                            # --- LOGICA SALVA-CONTO (Auto-Kill & Alert) ---
+                            df_temp = pd.DataFrame(st.session_state['trades'])
+                            if len(df_temp) >= 10: # Controlliamo dopo 10 trade
+                                wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
+                                current_wr = (wins_count / len(df_temp)) * 100
+                                
+                                # 1. Alert Telegram se sotto soglia profitto
+                                if current_wr < 58:
+                                    send_telegram_msg(f"⚠️ *ATTENZIONE*: WR al {current_wr:.1f}%. Strategia al limite del break-even.")
+                                
+                                # 2. Auto-Kill Switch se sotto il 50% (Strategia fallimentare)
+                                if current_wr < 50:
+                                    send_telegram_msg(f"🛑 *KILL-SWITCH ATTIVATO*\nWin Rate troppo basso ({current_wr:.1f}%). Il bot è stato fermato per proteggere il capitale.")
+                                    st.session_state['trading_attivo'] = False
+                                    st.rerun()
+
                             
                             # Dopo un trade, usciamo dal ciclo per resettare la scansione pulita
                             break 
