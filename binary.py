@@ -391,11 +391,19 @@ st.sidebar.subheader("📊 Report Filtri (Scarti)")
 c1, c2 = st.sidebar.columns(2)
 c1.metric("ADX No", st.session_state['scarti_adx'])
 c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])
-# Aggiungi questo sotto i contatori (Metric)
 st.sidebar.divider()
-st.sidebar.caption(f"🕒 Ultimo check: {get_now_rome().strftime('%H:%M:%S')}")
-#st.sidebar.caption(f"📅 Ultimo scan: {get_now_rome().strftime('%H:%M:%S')}")
-st.sidebar.caption(f"📡 Stato API: Connesso ({API.get_balance_mode()})")
+st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
+
+# Usiamo st.session_state per verificare se l'api esiste prima di chiamarla
+if st.session_state.get('iq_api'):
+    try:
+        current_mode = st.session_state['iq_api'].get_balance_mode()
+        st.sidebar.caption(f"📡 API: Connesso ({current_mode}) | Min Payout: 70%")
+    except:
+        st.sidebar.caption("📡 API: Errore comunicazione")
+else:
+    st.sidebar.caption("📡 API: Disconnesso")
+
 
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
