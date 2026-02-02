@@ -102,6 +102,21 @@ def get_session_status():
         
     return {"STATO": stato, "sessions": sessions}
 
+def check_and_reconnect():
+    """Controlla la connessione e riconnette se necessario."""
+    if st.session_state['iq_api'] is not None:
+        if not st.session_state['iq_api'].check_connect():
+            st.sidebar.warning("🔄 Connessione persa! Tentativo di riconnessione automatica...")
+            check, reason = st.session_state['iq_api'].connect()
+            if check:
+                st.sidebar.success("✅ Riconnessione riuscita!")
+                return True
+            else:
+                st.sidebar.error("❌ Riconnessione fallita. Controlla le credenziali.")
+                return False
+        return True
+    return False
+
 def check_market_alerts():
     # Usiamo il fuso orario UTC (GMT)
     now_gmt = datetime.now(pytz.utc)
@@ -223,23 +238,19 @@ def check_binary_signal(df):
     return None, stats, "Condizioni tecniche non soddisfatte"
     
 def smart_buy(API, stake, asset, action, duration):
-    # Prova prima le Digital (più probabili aperte la sera)
+    # Prova Digital prima, poi Binary, con gestione errori
     try:
+        # Digital
         check, id = API.buy_digital_spot(asset, stake, action, duration)
-        if check:
-            return True, id, "Digital"
-    except:
-        pass
-
-    # Se Digital fallisce, prova Binary
-    try:
+        if check and isinstance(id, int): return True, id, "Digital"
+        
+        # Binary
         check, id = API.buy(stake, asset, action, duration)
-        if check:
-            return True, id, "Binary"
-    except:
+        if check: return True, id, "Binary"
+        
+    except Exception:
         pass
-    
-    return False, None, "Chiuso"
+    return False, None, "Error/Closed"
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -428,28 +439,40 @@ if st.sidebar.button("🧪 Test Telegram"):
     st.sidebar.success("Messaggio inviato!")
 
 #st.sidebar.subheader("🛠️ Test Trade (1€)")
-# Cerca la parte: if st.sidebar.button("🧪 Esegui Test Smart (€1)"...
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Test Smart (€1)", use_container_width=True, type="secondary"):
-        with st.sidebar.status("Esecuzione test...", expanded=True) as status:
-            st.session_state['iq_api'].change_balance("PRACTICE")
-            time_lib.sleep(1)
-            
-            # Tenta EURUSD
-            test_asset = "EURUSD"
-            success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
-            
-            # Se fallisce, tenta EURUSD-OTC (utile nel weekend o tarda notte)
-            if not success:
-                test_asset = "EURUSD-OTC"
+        with st.sidebar.status("Esecuzione test (Timeout 30s)...", expanded=True) as status:
+            try:
+                st.session_state['iq_api'].change_balance("PRACTICE")
+                
+                # Definiamo il test con un timer di sicurezza
+                start_test = time_lib.time()
+                success = False
+                mode = ""
+                
+                # Tenta l'acquisto
+                test_asset = "EURUSD"
                 success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
+                
+                # Se fallisce il primo, prova l'OTC immediatamente
+                if not success:
+                    test_asset = "EURUSD-OTC"
+                    success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
 
-            if success:
-                status.update(label=f"✅ Test OK! ({mode})", state="complete")
-                st.sidebar.success(f"Aperto: {test_asset} ({mode})")
-            else:
-                status.update(label="❌ Fallito", state="error")
-                st.sidebar.error("Mercato chiuso o Errore API.")
+                # Controllo tempo trascorso
+                if time_lib.time() - start_test > 30:
+                    status.update(label="⚠️ Timeout 30s raggiunto", state="error")
+                    st.sidebar.warning("L'API è troppo lenta. Riprova tra un istante.")
+                elif success:
+                    status.update(label=f"✅ Test OK! ({mode})", state="complete")
+                    st.sidebar.success(f"Aperto: {test_asset} ({mode})")
+                else:
+                    status.update(label="❌ Mercato Chiuso", state="error")
+                    st.sidebar.error("Nessun asset disponibile al momento.")
+                    
+            except Exception as e:
+                status.update(label="❌ Errore API", state="error")
+                st.sidebar.error(f"Dettaglio: {e}")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -485,8 +508,13 @@ if st.session_state['iq_api']:
         </div>
     """, unsafe_allow_html=True)
 
-# Logica Autorun
+# --- LOGICA DI SCANSIONE CON TIMEOUT 15s ---
 if st.session_state['iq_api'] and st.session_state['trading_attivo']:
+    # Controllo riconnessione automatica
+    if not check_and_reconnect():
+        st.error("Il sistema non riesce a stabilire una connessione stabile.")
+        time_lib.sleep(5)
+        st.rerun()
     
     # 1. Controlla Alert Mercati (Apertura/Chiusura)
     check_market_alerts()
@@ -527,19 +555,28 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 time_lib.sleep(0.5) 
                 df = get_data_from_iq(API, asset)
     
-                if df is None or df.empty or len(df) < 50:
-                    st.write(f"⚠️ {asset}: Dati insufficienti (Mercato chiuso?)")
-                    continue 
-
+                if df.empty: continue 
+    
                 signal, stats, reason = check_binary_signal(df)
             
                 if signal:
-                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato! Tentativo di apertura...")
-                    
+                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
+
+                    # --- LOGICA TIMEOUT 15 SECONDI ---
+                    start_op = time_lib.time()
+                    success = False
+                    trade_id = None
+                    mode = ""
+    
                     try:
-                        # 1. TENTA L'ACQUISTO
+                        # Esecuzione con protezione timeout
                         success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
-                                           
+                        
+                        # Controllo se l'API ha impiegato più di 15s
+                        if time_lib.time() - start_op > 15:
+                            st.warning(f"⚠️ Timeout 15s superato su {asset}. Operazione annullata.")
+                            break
+
                         if success:
                             st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
                             with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s"):
@@ -548,7 +585,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             # Recupero esito
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
-                            # Registrazione
+                            # Registrazione Trade
                             st.session_state['trades'].append({
                                 "Ora": get_now_rome().strftime("%H:%M"),
                                 "Asset": asset, "Tipo": signal,
@@ -558,47 +595,26 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             st.session_state['daily_pnl'] += res
                             send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
 
-                            # --- LOGICA SALVA-CONTO (Auto-Kill & Alert) ---
+                            # Controllo Kill-Switch WR
                             df_temp = pd.DataFrame(st.session_state['trades'])
-                            if len(df_temp) >= 10: # Controlliamo dopo 10 trade
+                            if len(df_temp) >= 10:
                                 wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
                                 current_wr = (wins_count / len(df_temp)) * 100
-                                
-                                # 1. Alert Telegram se sotto soglia profitto
-                                if current_wr < 58:
-                                    send_telegram_msg(f"⚠️ *ATTENZIONE*: WR al {current_wr:.1f}%. Strategia al limite del break-even.")
-                                
-                                # 2. Auto-Kill Switch se sotto il 50% (Strategia fallimentare)
                                 if current_wr < 50:
-                                    send_telegram_msg(f"🛑 *KILL-SWITCH ATTIVATO*\nWin Rate troppo basso ({current_wr:.1f}%). Il bot è stato fermato per proteggere il capitale.")
+                                    send_telegram_msg(f"🛑 *KILL-SWITCH*: WR al {current_wr:.1f}%. Bot fermato.")
                                     st.session_state['trading_attivo'] = False
                                     st.rerun()
-
-                            
-                            # Dopo un trade, usciamo dal ciclo per resettare la scansione pulita
                             break 
                         
                         else:
-                            # --- DIAGNOSTICA RIFIUTO ---
-                            # Controlliamo il payout attuale per capire se è quello il problema
-                            payout = "N/A"
-                            try:
-                                all_payouts = API.get_all_profit()
-                                asset_payout = all_payouts.get(asset, {}).get('binary', 0) * 100
-                                payout = f"{asset_payout}%"
-                            except: pass
-
-                            st.warning(f"⚠️ {asset}: Ordine rifiutato dall'API.")
-                            st.info(f"🧐 **Diagnostica:** Payout attuale: {payout}. Possibili cause: Asset chiuso, payout sotto soglia minima o troppe richieste simultanee.")
+                            st.warning(f"⚠️ {asset}: Ordine rifiutato (Mercato chiuso o Payout basso).")
                             
                     except Exception as e:
-                        st.error(f"❌ Errore critico esecuzione: {e}")
+                        st.error(f"❌ Errore esecuzione: {e}")
                 else:
-                    # AGGIORNAMENTO SCARTI (Ora funzionerà)
-                    if "ADX" in reason: 
-                        st.session_state['scarti_adx'] += 1
-                    elif "Condizioni tecniche" in reason: 
-                        st.session_state['scarti_rsi_stoch'] += 1
+                    # Aggiornamento contatori scarti
+                    if "ADX" in reason: st.session_state['scarti_adx'] += 1
+                    elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
                     st.write(f"❌ {asset}: {reason}")
 else:
     if not st.session_state['iq_api']:
