@@ -223,22 +223,23 @@ def check_binary_signal(df):
     return None, stats, "Condizioni tecniche non soddisfatte"
     
 def smart_buy(API, stake, asset, action, duration):
-    # 1. Tentativo BINARY (Opzioni classiche)
+    # Prova prima le Digital (più probabili aperte la sera)
+    try:
+        check, id = API.buy_digital_spot(asset, stake, action, duration)
+        if check:
+            return True, id, "Digital"
+    except:
+        pass
+
+    # Se Digital fallisce, prova Binary
     try:
         check, id = API.buy(stake, asset, action, duration)
         if check:
             return True, id, "Binary"
-    except: pass
+    except:
+        pass
     
-    # 2. Tentativo DIGITAL (Se binary fallisce o è chiusa)
-    try:
-        # Digital vuole l'asset pulito e duration in minuti
-        check, id = API.buy_digital_spot(asset, stake, action, duration)
-        if check:
-            return True, id, "Digital"
-    except: pass
-    
-    return False, None, "Market Closed/Error"
+    return False, None, "Chiuso"
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -541,7 +542,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                                            
                         if success:
                             st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                            with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s."):
+                            with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s"):
                                 time_lib.sleep(62) 
 
                             # Recupero esito
