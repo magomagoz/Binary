@@ -329,28 +329,6 @@ else:
         st.session_state['trading_attivo'] = False
         st.rerun()
 
-st.sidebar.divider()
-st.sidebar.subheader("🛠️ Test Trade (1€)")
-
-if st.session_state['iq_api']:
-    if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
-        with st.sidebar.status("Esecuzione test...", expanded=True) as status:
-            # Assicuriamoci che il trading sia attivo internamente per la sessione
-            st.session_state['trading_attivo'] = True 
-            
-            # Forza il conto Practice
-            st.session_state['iq_api'].change_balance("PRACTICE")
-            time_lib.sleep(1) # Piccolo delay per il cambio balance
-            
-            # Tenta l'acquisto di test
-            check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
-            
-            if check:
-                status.update(label="✅ Test Riuscito!", state="complete")
-            else:
-                status.update(label="❌ Errore API", state="error")
-                # Messaggio diagnostico
-                st.sidebar.warning("Suggerimento: Se è weekend, scrivi 'EURUSD-OTC' nel codice del test.")
 
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
@@ -388,26 +366,14 @@ stop_loss_limit = st.sidebar.number_input("Stop Loss (€)", value=10.0)
 
 st.sidebar.divider()
 st.sidebar.subheader("📊 Report Filtri (Scarti)")
-c1, c2 = st.sidebar.columns(2)
-c1.metric("ADX No", st.session_state['scarti_adx'])
-c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])
-st.sidebar.divider()
-st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
-
-# Usiamo st.session_state per verificare se l'api esiste prima di chiamarla
-if st.session_state.get('iq_api'):
-    try:
-        current_mode = st.session_state['iq_api'].get_balance_mode()
-        st.sidebar.caption(f"📡 API: Connesso ({current_mode}) | Min Payout: 70%")
-    except:
-        st.sidebar.caption("📡 API: Errore comunicazione")
-else:
-    st.sidebar.caption("📡 API: Disconnesso")
-
+#c1, c2 = st.sidebar.columns(2)
+#c1.metric("ADX ", st.session_state['scarti_adx'])
+#c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])à
+#st.sidebar.divider()
 
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
-    st.write(f"🖇️ **RSI/Stoch centrali:** {st.session_state['scarti_rsi_stoch']}")
+    st.write(f"🖇️ **RSI/Stoch flat:** {st.session_state['scarti_rsi_stoch']}")
     st.write(f"💪 **Forza debole:** {st.session_state['scarti_forza']}")
 
     if st.button("Reset Statistiche Scarto"):
@@ -431,6 +397,34 @@ else:
 
 st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
 
+# Da inserire in st.sidebar per un test rapido
+st.sidebar.markdown("---")
+if st.sidebar.button("🧪 Test Telegram"):
+    send_telegram_msg("🔔 *Sentinel AI Test*\nConnessione riuscita con successo!")
+    
+    st.sidebar.success("Messaggio inviato!")
+
+st.sidebar.subheader("🛠️ Test Trade (1€)")
+if st.session_state['iq_api']:
+    if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
+        with st.sidebar.status("Esecuzione test...", expanded=True) as status:
+            # Assicuriamoci che il trading sia attivo internamente per la sessione
+            st.session_state['trading_attivo'] = True 
+            
+            # Forza il conto Practice
+            st.session_state['iq_api'].change_balance("PRACTICE")
+            time_lib.sleep(1) # Piccolo delay per il cambio balance
+            
+            # Tenta l'acquisto di test
+            check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
+            
+            if check:
+                status.update(label="✅ Test Riuscito!", state="complete")
+            else:
+                status.update(label="❌ Errore API", state="error")
+                # Messaggio diagnostico
+                st.sidebar.warning("Suggerimento: Se è weekend, scrivi 'EURUSD-OTC' nel codice del test.")
+
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
 if st.session_state['trading_attivo']:
@@ -441,13 +435,6 @@ else:
     if st.sidebar.button("🚀 RIATTIVA SISTEMA", use_container_width=True):
         st.session_state['trading_attivo'] = True
         st.rerun()
-
-# Da inserire in st.sidebar per un test rapido
-st.sidebar.markdown("---")
-if st.sidebar.button("🧪 Test Telegram"):
-    send_telegram_msg("🔔 *Sentinel AI Test*\nConnessione riuscita con successo!")
-    
-    st.sidebar.success("Messaggio inviato!")
 
 # Reset Sidebar
 st.sidebar.markdown("---")
