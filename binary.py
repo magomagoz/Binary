@@ -223,18 +223,23 @@ def check_binary_signal(df):
     return None, stats, "Condizioni tecniche non soddisfatte"
     
 def smart_buy(API, stake, asset, action, duration):
-    # Azione deve essere 'call' o 'put'
-    # 1. Prova Binary
-    check, id = API.buy(stake, asset, action, duration)
-    if check:
-        return True, id, "Binary"
+    # 1. Tentativo BINARY (Opzioni classiche)
+    try:
+        check, id = API.buy(stake, asset, action, duration)
+        if check:
+            return True, id, "Binary"
+    except: pass
     
-    # 2. Se fallisce, prova Digital
-    check, id = API.buy_digital_spot(asset, stake, action, duration)
-    if check:
-        return True, id, "Digital"
+    # 2. Tentativo DIGITAL (Se binary fallisce o è chiusa)
+    try:
+        # Digital vuole l'asset senza slash (es. EURUSD) e duration in minuti (1, 5, 15)
+        # Nota: buy_digital_spot accetta (asset, amount, action, duration_minutes)
+        check, id = API.buy_digital_spot(asset, stake, action, duration)
+        if check:
+            return True, id, "Digital"
+    except: pass
     
-    return False, None, None
+    return False, None, "Market Closed"
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -424,24 +429,27 @@ if st.sidebar.button("🧪 Test Telegram"):
 
 #st.sidebar.subheader("🛠️ Test Trade (1€)")
 if st.session_state['iq_api']:
-    if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
+    if st.sidebar.button("🧪 Esegui Test Smart (€1)", use_container_width=True, type="secondary"):
         with st.sidebar.status("Esecuzione test...", expanded=True) as status:
-            # Assicuriamoci che il trading sia attivo internamente per la sessione
-            st.session_state['trading_attivo'] = True 
-            
-            # Forza il conto Practice
             st.session_state['iq_api'].change_balance("PRACTICE")
-            time_lib.sleep(1) # Piccolo delay per il cambio balance
+            time_lib.sleep(1)
             
-            # Tenta l'acquisto di test
-            check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
+            # Usiamo smart_buy anche per il test!
+            # Proviamo con EURUSD. Se fallisce, proviamo EURUSD-OTC
+            test_asset = "EURUSD"
+            success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
             
-            if check:
-                status.update(label="✅ Test Riuscito!", state="complete")
+            if not success:
+                # Tentativo disperato su OTC
+                test_asset = "EURUSD-OTC"
+                success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
+
+            if success:
+                status.update(label=f"✅ Test OK! ({mode})", state="complete")
+                st.sidebar.success(f"Aperto su {test_asset} ({mode})")
             else:
-                status.update(label="❌ Errore API", state="error")
-                # Messaggio diagnostico
-                st.sidebar.warning("Suggerimento: Se è weekend, scrivi 'EURUSD-OTC' nel codice del test.")
+                status.update(label="❌ Fallito", state="error")
+                st.sidebar.error("Nessun asset disponibile (Binary/Digital chiuse).")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
