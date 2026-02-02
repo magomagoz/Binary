@@ -468,7 +468,12 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     if signal:
                         # Se c'è un segnale, proviamo l'acquisto immediato
                         st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Eseguo...")
+
+                        # Tenta l'acquisto e stampa l'errore esatto se fallisce
                         check, id = API.buy(stake, asset, signal.lower(), 1)
+                        if not check:
+                            # Prova a recuperare il motivo del rifiuto se l'API lo fornisce
+                            st.sidebar.error(f"Nota tecnica: {asset} potrebbe non essere disponibile come 'Binary' ora.")
                         
                         if check:
                             time_lib.sleep(62) # Attesa scadenza
