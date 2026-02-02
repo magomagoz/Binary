@@ -589,23 +589,23 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                         "ADX": stats.get('ADX', 0)
                     })
                         
-                        # Aggiornamento PnL specifico
-                        if is_ph:
-                            st.session_state['pnl_power_hour'] += res
-                        else:
-                            st.session_state['pnl_normal'] += res                    
-                            st.session_state['daily_pnl'] += res
-                            send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
+                    # Aggiornamento PnL specifico
+                    if is_ph:
+                        st.session_state['pnl_power_hour'] += res
+                    else:
+                        st.session_state['pnl_normal'] += res                    
+                        st.session_state['daily_pnl'] += res
+                        send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
 
-                            # Controllo Kill-Switch WR
-                            df_temp = pd.DataFrame(st.session_state['trades'])
-                            if len(df_temp) >= 10:
-                                wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
-                                current_wr = (wins_count / len(df_temp)) * 100
-                                if current_wr < 50:
-                                    send_telegram_msg(f"🛑 *KILL-SWITCH*: WR al {current_wr:.1f}%. Bot fermato.")
-                                    st.session_state['trading_attivo'] = False
-                                    st.rerun()
+                        # Controllo Kill-Switch WR
+                        df_temp = pd.DataFrame(st.session_state['trades'])
+                        if len(df_temp) >= 10:
+                            wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
+                            current_wr = (wins_count / len(df_temp)) * 100
+                            if current_wr < 50:
+                                send_telegram_msg(f"🛑 *KILL-SWITCH*: WR al {current_wr:.1f}%. Bot fermato.")
+                                st.session_state['trading_attivo'] = False
+                                st.rerun()
                             break 
                         
                         else:
