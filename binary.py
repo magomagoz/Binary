@@ -700,13 +700,18 @@ st.subheader("🔬 Analisi prestazioni")
 
 if st.session_state['trades']:
     df_analysis = pd.DataFrame(st.session_state['trades'])
+    wins = len(df_analysis[df_analysis['Esito'] == 'WIN'])
+    total = len(df_analysis)
+    wr = (wins / total) * 100
+
+    # Visualizzazione chiara del target
+    color = "green" if wr > 58 else "red"
+    st.markdown(f"### Win Rate Attuale: <span style='color:{color}'>{wr:.1f}%</span>", unsafe_allow_html=True)
     
-    # Metriche
-    win_rate = (len(df_analysis[df_analysis['Esito'] == 'WIN']) / len(df_analysis)) * 100
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Win Rate", f"{win_rate:.1f}%")
-    c2.metric("RSI Medio", f"{df_analysis['RSI'].mean():.2f}")
-    c3.metric("Segnali Totali", len(df_analysis))
+    if wr > 58:
+        st.success("✅ La strategia è statisticamente vincente!")
+    else:
+        st.warning("⚠️ WR sotto il 58%: la strategia necessita di filtri più severi.")
 
     # Grafico Distribuzione
     fig_an = go.Figure()
@@ -728,31 +733,28 @@ if st.session_state['trades']:
 else:
     st.info("⏳ In attesa di dati per l'analisi")
 
-# --- SEZIONE REPORTING IN FONDO AL SCRIPT ---
+# --- SEZIONE REPORTING FINALE ---
 st.divider()
-st.subheader("📊 Storico Operazioni Sessione")
+st.subheader("📊 Riepilogo Operazioni")
 
 if st.session_state['trades']:
-    # Trasforma la lista in DataFrame per una visualizzazione pulita
-    df_history = pd.DataFrame(st.session_state['trades'])
-    # Mostra la tabella
-    st.dataframe(df_history, use_container_width=True)
+    col_res1, col_res2 = st.columns([1, 2])
     
-    # Mostra il totale
-    st.metric("Profitto Totale Sessione", f"€ {st.session_state['daily_pnl']:.2f}")
+    with col_res1:
+        st.metric("Profitto Totale", f"€ {st.session_state['daily_pnl']:.2f}")
+    
+    with col_res2:
+        # Mostriamo solo le ultime 10 operazioni per non allungare troppo la pagina
+        df_history = pd.DataFrame(st.session_state['trades']).tail(10)
+        st.table(df_history) # 'st.table' è ottima per visualizzazioni statiche veloci
 else:
-    st.info("🟡 In attesa del primo trade... La scansione è attiva.")
+    st.info("🟡 Nessun trade eseguito in questa sessione. Scansione attiva...")
 
-st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
-
-if st.session_state['trades']:
-    st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
-
-# Auto-refresh ogni 60s
-#st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; border-radius:10px; overflow:hidden;"><div style="background:red; height:100%; width:100%; animation: fill 60s linear infinite;"></div></div><style>@keyframes fill {0% {width: 0%;} 100% {width: 100%;}}</style>""", unsafe_allow_html=True)
-# Sostituisci le ultime due righe (sleep e rerun) con questo:
+# --- LOGICA DI REFRESH ---
 if st.session_state['trading_attivo']:
-    time_lib.sleep(10) # Riduci a 10-20 secondi per rendere il bot più reattivo
+    # Mostra un piccolo timer visivo o avviso
+    st.caption(f"🔄 Prossimo aggiornamento tra 10 secondi... (Ora: {get_now_rome().strftime('%H:%M:%S')})")
+    time_lib.sleep(10)
     st.rerun()
 else:
-    st.info("Bot in pausa. Clicca 'Riattiva' nella sidebar per ricominciare.")
+    st.info("🛑 Bot in pausa. Riattiva dalla sidebar per riprendere la scansione.")
