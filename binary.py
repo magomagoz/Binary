@@ -343,16 +343,33 @@ st.sidebar.markdown(f"""
 
 # --- LISTA BORSE ---
 # Ciclo solo sulle sessioni per non ripetere lo stato generale
+st.sidebar.divider()
+st.sidebar.subheader("🌍 Sessioni di Mercato")
+
+status_data = get_session_status()
+
+# --- BLOCCO STATO GENERALE ---
+st.sidebar.markdown(f"""
+    <div style="background-color: rgba(255, 255, 255, 0.1); 
+                padding: 8px; 
+                border-radius: 10px; 
+                border: 1px solid #444; 
+                text-align: center; 
+                margin-bottom: 10px;">
+        <small style="color: #888; text-transform: uppercase; font-size: 0.7em;">Stato Mercato</small><br>
+        <b style="font-size: 1em;">{status_data['STATO']}</b>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- LISTA BORSE IN LINEA (ANTI-A CAPO) ---
 if status_data['sessions']:
     for s_name, is_open in status_data['sessions'].items():
         icon = "🟢" if is_open else "🔴"
-        label = "Aperto" if is_open else "Chiuso"
-        # Usiamo le colonne per allineare icone e nomi
-        col1, col2 = st.sidebar.columns([0.8, 0.2])
-        col1.write(f"**{s_name}**")
-        col2.write(icon)
+        # Usiamo un unico markdown per riga, senza colonne
+        # Il simbolo &nbsp; aggiunge uno spazio fisso tra nome e pallino
+        st.sidebar.markdown(f"**{s_name}**&nbsp;&nbsp;{icon}")
 else:
-    st.sidebar.warning("Mercato chiuso per il Weekend")
+    st.sidebar.warning("Mercato chiuso (Weekend)")
 
 st.sidebar.divider()
 st.sidebar.subheader("💰 Money Management")
