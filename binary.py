@@ -778,7 +778,7 @@ st.subheader("⚔️ Power Hour Challenge")
 col_ph, col_norm = st.columns(2)
 
 with col_ph:
-    st.status("### 🔥 Sessione Power")
+    st.markdown("### 🔥 Sessione Power")
     st.metric("PnL Power Hour", f"€ {st.session_state['pnl_power_hour']:.2f}")
     df_ph = pd.DataFrame([t for t in st.session_state['trades'] if t['Sessione'] == "🔥 Power Hour"])
     if not df_ph.empty:
