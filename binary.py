@@ -416,6 +416,17 @@ with st.sidebar.expander("Dettaglio Scarti", expanded=True):
         st.session_state['scarti_forza'] = 0
         st.rerun()
 
+    # --- PUNTO 5: SEMAFORO E PAYOUT ---
+    st.sidebar.divider()
+    
+    # Controllo stato per il semaforo
+    is_alive = API.check_connect()
+    semaforo = "🟢 API OPERATIVA" if is_alive else "🔴 API OFFLINE"
+    st.sidebar.subheader(semaforo)
+    
+    st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
+    st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
+
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
 if st.session_state['trading_attivo']:
@@ -475,6 +486,15 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         st.session_state['trading_attivo'] = False
     else:
         API = st.session_state['iq_api']
+        
+        # --- PUNTO 1: CONTROLLO INTEGRITÀ CONNESSIONE ---
+        if not API.check_connect():
+            st.sidebar.warning("⚠️ Connessione persa! Riconnessione...")
+            check, reason = API.connect()
+            if not check:
+                st.error("❌ Errore critico IQ Option. Bot fermato.")
+                st.session_state['trading_attivo'] = False
+                st.rerun()
 
         # --- CONTROLLO STATO MERCATI ---
         is_weekend = datetime.now(pytz.timezone('Europe/Rome')).weekday() >= 5
@@ -490,11 +510,16 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 df = get_data_from_iq(API, asset)
+    
+                # --- PUNTO 3: PROTEZIONE DATI ---
+                if df is None or df.empty or len(df) < 50:
+                    st.write(f"⚠️ {asset}: Dati insufficienti. Salto...")
+                    continue 
+
                 if not df.empty:
                     signal, stats, reason = check_binary_signal(df)
-                    
-
-                    
+                    time_lib.sleep(0.5) 
+                
                     if signal:
                         st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
                         # Usiamo smart_buy invece di API.buy
