@@ -722,9 +722,7 @@ if st.session_state['trades']:
 else:
     st.info("🟡 In attesa del primo trade... La scansione è attiva.")
 
-col_res1, col_res2 = st.columns(2)
-with col_res1:
-    st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
+st.subheader(f"💰 Profitto giornaliero: € {st.session_state['daily_pnl']:.2f}")
 
 if st.session_state['trades']:
     st.dataframe(pd.DataFrame(st.session_state['trades']), use_container_width=True)
