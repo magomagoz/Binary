@@ -327,22 +327,6 @@ st.sidebar.subheader("🌍 Sessioni di Mercato")
 
 status_data = get_session_status()
 
-# --- BLOCCO STATO GENERALE ---
-# Usiamo un box colorato per separarlo visivamente
-st.sidebar.markdown(f"""
-    <div style="background-color: rgba(255, 255, 255, 0.1); 
-                padding: 10px; 
-                border-radius: 10px; 
-                border: 1px solid #444; 
-                text-align: center; 
-                margin-bottom: 15px;">
-        <small style="color: #888; text-transform: uppercase;">Stato Mercato</small><br>
-        <b style="font-size: 1.2em;">{status_data['STATO']}</b>
-    </div>
-""", unsafe_allow_html=True)
-
-# --- LISTA BORSE ---
-# Ciclo solo sulle sessioni per non ripetere lo stato generale
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
 
