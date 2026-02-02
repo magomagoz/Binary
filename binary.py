@@ -59,6 +59,9 @@ if 'last_daily_report_date' not in st.session_state:
 if 'scarti_adx' not in st.session_state: st.session_state['scarti_adx'] = 0
 if 'scarti_rsi_stoch' not in st.session_state: st.session_state['scarti_rsi_stoch'] = 0
 if 'scarti_forza' not in st.session_state: st.session_state['scarti_forza'] = 0
+if 'pnl_power_hour' not in st.session_state: st.session_state['pnl_power_hour'] = 0.0
+if 'pnl_normal' not in st.session_state: st.session_state['pnl_normal'] = 0.0
+
 
 # --- MAPPA ASSET ---
 asset_map = {
@@ -546,16 +549,31 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s"):
                                 time_lib.sleep(62) 
 
-                            # Recupero esito
+                            # --- Registrazione Esito ---
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
-                            # Registrazione Trade
+                            # Determina se è Power Hour (13:00-17:00 GMT)
+                            now_gmt = datetime.now(pytz.utc)
+                            is_ph = 13 <= now_gmt.hour < 17
+                            
+                            # Salvataggio dati estesi
                             st.session_state['trades'].append({
                                 "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, "Tipo": signal,
+                                "Asset": asset, 
+                                "Tipo": signal,
                                 "Esito": "WIN" if res > 0 else "LOSS", 
-                                "Profitto": res, "RSI": stats.get('RSI', 0), "ADX": stats.get('ADX', 0)
+                                "Profitto": res,
+                                "Sessione": "🔥 Power Hour" if is_ph else "☕ Normal",
+                                "RSI": stats.get('RSI', 0), 
+                                "ADX": stats.get('ADX', 0)
                             })
+                            
+                            # Aggiornamento PnL specifico
+                            if is_ph:
+                                st.session_state['pnl_power_hour'] += res
+                            else:
+                                st.session_state['pnl_normal'] += res
+                            
                             st.session_state['daily_pnl'] += res
                             send_telegram_msg(f"📊 *TRADE CONCLUSO*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
 
@@ -755,6 +773,25 @@ if st.session_state['trades']:
     st.download_button("📥 SCARICA REPORT (.csv)", data=csv, file_name="Sentinel_Report.csv", mime="text/csv")
 else:
     st.info("⏳ In attesa di dati per l'analisi")
+
+st.subheader("⚔️ Power Hour vs Normal Hours")
+col_ph, col_norm = st.columns(2)
+
+with col_ph:
+    st.markdown("### 🔥 Sessione Power")
+    st.metric("PnL Power Hour", f"€ {st.session_state['pnl_power_hour']:.2f}")
+    df_ph = pd.DataFrame([t for t in st.session_state['trades'] if t['Sessione'] == "🔥 Power Hour"])
+    if not df_ph.empty:
+        wr_ph = (len(df_ph[df_ph['Esito'] == 'WIN']) / len(df_ph)) * 100
+        st.caption(f"Win Rate: {wr_ph:.1f}%")
+
+with col_norm:
+    st.markdown("### ☕ Ore Normali")
+    st.metric("PnL Normal Hours", f"€ {st.session_state['pnl_normal']:.2f}")
+    df_norm = pd.DataFrame([t for t in st.session_state['trades'] if t['Sessione'] == "☕ Normal"])
+    if not df_norm.empty:
+        wr_norm = (len(df_norm[df_norm['Esito'] == 'WIN']) / len(df_norm)) * 100
+        st.caption(f"Win Rate: {wr_norm:.1f}%")
 
 # --- SEZIONE REPORTING FINALE ---
 st.divider()
