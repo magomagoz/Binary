@@ -222,6 +222,20 @@ def check_binary_signal(df):
             
     return None, stats, "Condizioni tecniche non soddisfatte"
     
+def smart_buy(API, stake, asset, action, duration):
+    # Azione deve essere 'call' o 'put'
+    # 1. Prova Binary
+    check, id = API.buy(stake, asset, action, duration)
+    if check:
+        return True, id, "Binary"
+    
+    # 2. Se fallisce, prova Digital
+    check, id = API.buy_digital_spot(asset, stake, action, duration)
+    if check:
+        return True, id, "Digital"
+    
+    return False, None, None
+
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
     # Invio alle 22:05
@@ -316,7 +330,7 @@ else:
         st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("🛠️ Debug & Test")
+st.sidebar.subheader("🛠️ Test Trade (1€)")
 
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
@@ -378,7 +392,10 @@ c1, c2 = st.sidebar.columns(2)
 c1.metric("ADX No", st.session_state['scarti_adx'])
 c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])
 # Aggiungi questo sotto i contatori (Metric)
+st.sidebar.divider()
 st.sidebar.caption(f"🕒 Ultimo check: {get_now_rome().strftime('%H:%M:%S')}")
+#st.sidebar.caption(f"📅 Ultimo scan: {get_now_rome().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"📡 Stato API: Connesso ({API.get_balance_mode()})")
 
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
@@ -468,12 +485,24 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 if not df.empty:
                     signal, stats, reason = check_binary_signal(df)
                     
-                    if signal:
-                        # Se c'è un segnale, proviamo l'acquisto immediato
-                        st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Eseguo...")
 
-                        # Tenta l'acquisto e stampa l'errore esatto se fallisce
-                        check, id = API.buy(stake, asset, signal.lower(), 1)
+                    
+                    if signal:
+                        st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
+                        # Usiamo smart_buy invece di API.buy
+                        check, id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
+                        
+                        if check:
+                            st.success(f"✅ Ordine inviato in modalità: {mode}")
+                            time_lib.sleep(62)
+                            
+                            # Recupero risultato in base alla modalità
+                            if mode == "Binary":
+                                res = API.check_win_v2(id)
+                            else:
+                                # Per Digital il recupero è leggermente diverso
+                                res = API.get_digital_prox_result(id)
+                                   
                         if not check:
                             # Prova a recuperare il motivo del rifiuto se l'API lo fornisce
                             st.sidebar.error(f"Nota tecnica: {asset} potrebbe non essere disponibile come 'Binary' ora.")
