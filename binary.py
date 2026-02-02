@@ -377,6 +377,9 @@ st.sidebar.subheader("📊 Report Filtri (Scarti)")
 c1, c2 = st.sidebar.columns(2)
 c1.metric("ADX No", st.session_state['scarti_adx'])
 c2.metric("Tecnico No", st.session_state['scarti_rsi_stoch'])
+# Aggiungi questo sotto i contatori (Metric)
+st.sidebar.caption(f"🕒 Ultimo check: {get_now_rome().strftime('%H:%M:%S')}")
+
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
     st.write(f"🖇️ **RSI/Stoch centrali:** {st.session_state['scarti_rsi_stoch']}")
