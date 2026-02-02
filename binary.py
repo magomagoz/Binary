@@ -317,6 +317,8 @@ else:
 st.sidebar.divider()
 st.sidebar.subheader("🛠️ Debug & Test")
 
+
+
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
         with st.sidebar.status("Esecuzione test...", expanded=True) as status:
@@ -377,7 +379,7 @@ st.sidebar.divider()
 st.sidebar.subheader("🛡️ Report Filtri (Scarti)")
 with st.sidebar.expander("Dettaglio Scarti", expanded=True):
     st.write(f"📉 **ADX non idoneo:** {st.session_state['scarti_adx']}")
-    st.write(f"🖇️ **RSI/Stoch no:** {st.session_state['scarti_rsi_stoch']}")
+    st.write(f"🖇️ **RSI/Stoch centrali:** {st.session_state['scarti_rsi_stoch']}")
     st.write(f"💪 **Forza debole:** {st.session_state['scarti_forza']}")
 
     if st.button("Reset Statistiche Scarto"):
