@@ -420,20 +420,16 @@ st.sidebar.divider()
 st.sidebar.subheader("📡 Stato Sistema")
 
 if st.session_state.get('iq_api'):
-    API_ST = st.session_state['iq_api']
-    # --- PUNTO 5: SEMAFORO REATTIVO ---
-    if API_ST.check_connect():
+    # Semaforo sicuro: controlla se l'oggetto esiste prima di chiamarlo
+    if st.session_state['iq_api'].check_connect():
         st.sidebar.markdown("### 🟢 API OPERATIVA")
-        mode = API_ST.get_balance_mode()
-        st.sidebar.caption(f"✅ Connesso in modalità: **{mode}**")
+        st.sidebar.caption(f"✅ Modalità: {st.session_state['iq_api'].get_balance_mode()}")
     else:
-        st.sidebar.markdown("### 🔴 API OFFLINE")
-        st.sidebar.warning("Tentativo di riconnessione automatico al prossimo scan...")
+        st.sidebar.markdown("### 🔴 API DISCONNESSA")
 else:
-    st.sidebar.markdown("### ⚪ NON CONNESSO")
+    st.sidebar.markdown("### ⚪ ATTESA LOGIN")
 
 st.sidebar.caption(f"🕒 Ultimo Scan: {get_now_rome().strftime('%H:%M:%S')}")
-#st.sidebar.caption(f"📡 Modalità: {API.get_balance_mode()}")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -498,7 +494,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         # --- PUNTO 1: CONTROLLO INTEGRITÀ CONNESSIONE ---
         if not API.check_connect():
             st.sidebar.warning("⚠️ Connessione persa! Riconnessione...")
-            check, reason = API.connect()
+            API.connect() # Tenta il ripristino silenzioso
             if not check:
                 st.error("❌ Errore critico IQ Option. Bot fermato.")
                 st.session_state['trading_attivo'] = False
@@ -517,12 +513,11 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
             for asset in assets_to_scan:
                 # --- PUNTO 2: PAUSA ANTI-BAN ---
                 time_lib.sleep(0.5) 
-
+                
                 df = get_data_from_iq(API, asset)
     
                 # --- PUNTO 3: PROTEZIONE DATI ---
                 if df is None or df.empty or len(df) < 50:
-                    st.write(f"⚠️ {asset}: Dati insufficienti. Salto...")
                     continue 
 
                 signal, stats, reason = check_binary_signal(df)
@@ -696,9 +691,13 @@ if st.session_state['iq_api']:
 else:
     st.info("In attesa della connessione...")
 
-# --- REPORTING ---
+#--- REPORTING ---
 st.divider()
-#st.subheader(f"📊 Analisi Operativa")
+st.subheader("📊 Storico Operazioni Sessione")
+if st.session_state['trades']:
+    st.table(pd.DataFrame(st.session_state['trades']))
+else:
+    st.info("Nessuna operazione eseguita in questa sessione.")
 
 col_res1, col_res2 = st.columns(2)
 with col_res1:
