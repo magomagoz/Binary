@@ -327,11 +327,6 @@ st.sidebar.subheader("🌍 Sessioni di Mercato")
 
 status_data = get_session_status()
 
-st.sidebar.divider()
-st.sidebar.subheader("🌍 Sessioni di Mercato")
-
-status_data = get_session_status()
-
 # --- BLOCCO STATO GENERALE ---
 st.sidebar.markdown(f"""
     <div style="background-color: rgba(255, 255, 255, 0.1); 
