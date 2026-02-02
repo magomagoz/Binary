@@ -490,12 +490,12 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         st.session_state['trading_attivo'] = False
     else:
         API = st.session_state['iq_api']
-        
+           
         # --- PUNTO 1: CONTROLLO INTEGRITÀ CONNESSIONE ---
         if not API.check_connect():
             st.sidebar.warning("⚠️ Connessione persa! Riconnessione...")
-            API.connect() # Tenta il ripristino silenzioso
-            if not check:
+            connected, reason = API.connect() 
+            if not connected:
                 st.error("❌ Errore critico IQ Option. Bot fermato.")
                 st.session_state['trading_attivo'] = False
                 st.rerun()
@@ -511,56 +511,44 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
-                # --- PUNTO 2: PAUSA ANTI-BAN ---
                 time_lib.sleep(0.5) 
-                
                 df = get_data_from_iq(API, asset)
     
-                # --- PUNTO 3: PROTEZIONE DATI ---
                 if df is None or df.empty or len(df) < 50:
+                    st.write(f"⚠️ {asset}: Dati insufficienti (Mercato chiuso?)")
                     continue 
 
                 signal, stats, reason = check_binary_signal(df)
             
                 if signal:
-                    st.write(f"🚀 **{asset}**: Segnale {signal} trovato! Esecuzione Smart...")
-                    
-                    # 1. TENTA L'ACQUISTO
+                    st.write(f"🚀 **{asset}**: Segnale {signal} trovato!")
                     try:
                         success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
-                    except Exception as e:
-                        st.error(f"❌ Errore tecnico durante smart_buy: {e}")
-                        success = False
-
-                    if success:
-                        st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                        # Notifica Telegram opzionale
-                        send_telegram_msg(f"🔔 *ORDINE APERTO*\nAsset: {asset}\nTipo: {signal}\nModo: {mode}")
-                        
-                        # 2. ATTESA SCADENZA (Mentre aspetti, il bot non deve bloccarsi)
-                        time_lib.sleep(62) 
-                        
-                        # 3. RECUPERO ESITO
-                        try:
+                        if success:
+                            st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
+                            send_telegram_msg(f"🔔 *ORDINE APERTO*\nAsset: {asset}\nTipo: {signal}")
+                            time_lib.sleep(62) 
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
-                            # Registrazione nello storico
                             st.session_state['trades'].append({
                                 "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, 
-                                "Tipo": signal,
+                                "Asset": asset, "Tipo": signal,
                                 "Esito": "WIN" if res > 0 else "LOSS", 
-                                "Profitto": res,
-                                "RSI": stats.get('RSI', 0),
-                                "ADX": stats.get('ADX', 0)
+                                "Profitto": res, "RSI": stats.get('RSI', 0), "ADX": stats.get('ADX', 0)
                             })
                             st.session_state['daily_pnl'] += res
-                            st.rerun() # Forza il refresh per mostrare il trade in tabella
-                        except Exception as e:
-                            st.error(f"⚠️ Errore nel recupero esito: {e}")
-                    else:
-                        st.warning(f"❌ {asset}: Ordine rifiutato dall'API (Mercato chiuso o payout basso).")
-                        # Non bloccare, continua con il prossimo asset 
+                            st.rerun()
+                        else:
+                            st.warning(f"❌ {asset}: Payout basso o Asset chiuso.")
+                    except Exception as e:
+                        st.error(f"Errore esecuzione: {e}")
+                else:
+                    # AGGIORNAMENTO SCARTI (Ora funzionerà)
+                    if "ADX" in reason: 
+                        st.session_state['scarti_adx'] += 1
+                    elif "Condizioni tecniche" in reason: 
+                        st.session_state['scarti_rsi_stoch'] += 1
+                    st.write(f"❌ {asset}: {reason}")
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
@@ -756,8 +744,9 @@ if st.session_state['trades']:
 
 # Auto-refresh ogni 60s
 #st.sidebar.markdown("""<div style="background:#222; height:5px; width:100%; border-radius:10px; overflow:hidden;"><div style="background:red; height:100%; width:100%; animation: fill 60s linear infinite;"></div></div><style>@keyframes fill {0% {width: 0%;} 100% {width: 100%;}}</style>""", unsafe_allow_html=True)
-time_lib.sleep(60)
-st.rerun()
-
-
-
+# Sostituisci le ultime due righe (sleep e rerun) con questo:
+if st.session_state['trading_attivo']:
+    time_lib.sleep(10) # Riduci a 10-20 secondi per rendere il bot più reattivo
+    st.rerun()
+else:
+    st.info("Bot in pausa. Clicca 'Riattiva' nella sidebar per ricominciare.")
