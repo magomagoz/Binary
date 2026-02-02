@@ -327,29 +327,25 @@ st.sidebar.subheader("🛠️ Debug & Test")
 
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Trade di Test (€1)", use_container_width=True, type="secondary"):
-        with st.sidebar.status("Esecuzione test...", expanded=False) as status:
-            # 1. Forza il conto Practice per sicurezza
-            st.session_state['iq_api'].change_balance("PRACTICE")
+        with st.sidebar.status("Esecuzione test...", expanded=True) as status:
+            # Assicuriamoci che il trading sia attivo internamente per la sessione
+            st.session_state['trading_attivo'] = True 
             
-            # 2. Tenta un acquisto CALL su EURUSD (scadenza 1 min)
+            # Forza il conto Practice
+            st.session_state['iq_api'].change_balance("PRACTICE")
+            time_lib.sleep(1) # Piccolo delay per il cambio balance
+            
+            # Tenta l'acquisto
             check, id = st.session_state['iq_api'].buy(1, "EURUSD", "call", 1)
             
             if check:
-                st.sidebar.success(f"✅ Test Riuscito! ID: {id}")
+                status.update(label="✅ Test Riuscito!", state="complete")
+                st.sidebar.success(f"ID Ordine: {id}")
                 st.balloons()
-                # Registriamo il trade nel log per vederlo nella tabella
-                st.session_state['trades'].append({
-                    "Ora": get_now_rome().strftime("%H:%M:%S"),
-                    "Asset": "EURUSD (TEST)",
-                    "Tipo": "CALL",
-                    "Esito": "TEST",
-                    "Profitto": 0.0,
-                    "RSI": 0, "ADX": 0, "Stoch": 0, "ATR": 0, "Trend": "TEST"
-                })
             else:
-                st.sidebar.error("❌ Test Fallito: controlla i log dell'API.")
-else:
-    st.sidebar.warning("Connetti l'API per testare.")
+                status.update(label="❌ Errore API", state="error")
+                # Mostriamo l'errore specifico se possibile
+                st.sidebar.error("L'API ha rifiutato l'ordine. Verifica che i mercati non siano in pausa tecnica.")
 
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
