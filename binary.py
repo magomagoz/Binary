@@ -232,14 +232,13 @@ def smart_buy(API, stake, asset, action, duration):
     
     # 2. Tentativo DIGITAL (Se binary fallisce o è chiusa)
     try:
-        # Digital vuole l'asset senza slash (es. EURUSD) e duration in minuti (1, 5, 15)
-        # Nota: buy_digital_spot accetta (asset, amount, action, duration_minutes)
+        # Digital vuole l'asset pulito e duration in minuti
         check, id = API.buy_digital_spot(asset, stake, action, duration)
         if check:
             return True, id, "Digital"
     except: pass
     
-    return False, None, "Market Closed"
+    return False, None, "Market Closed/Error"
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
@@ -428,28 +427,28 @@ if st.sidebar.button("🧪 Test Telegram"):
     st.sidebar.success("Messaggio inviato!")
 
 #st.sidebar.subheader("🛠️ Test Trade (1€)")
+# Cerca la parte: if st.sidebar.button("🧪 Esegui Test Smart (€1)"...
 if st.session_state['iq_api']:
     if st.sidebar.button("🧪 Esegui Test Smart (€1)", use_container_width=True, type="secondary"):
         with st.sidebar.status("Esecuzione test...", expanded=True) as status:
             st.session_state['iq_api'].change_balance("PRACTICE")
             time_lib.sleep(1)
             
-            # Usiamo smart_buy anche per il test!
-            # Proviamo con EURUSD. Se fallisce, proviamo EURUSD-OTC
+            # Tenta EURUSD
             test_asset = "EURUSD"
             success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
             
+            # Se fallisce, tenta EURUSD-OTC (utile nel weekend o tarda notte)
             if not success:
-                # Tentativo disperato su OTC
                 test_asset = "EURUSD-OTC"
                 success, id, mode = smart_buy(st.session_state['iq_api'], 1, test_asset, "call", 1)
 
             if success:
                 status.update(label=f"✅ Test OK! ({mode})", state="complete")
-                st.sidebar.success(f"Aperto su {test_asset} ({mode})")
+                st.sidebar.success(f"Aperto: {test_asset} ({mode})")
             else:
                 status.update(label="❌ Fallito", state="error")
-                st.sidebar.error("Nessun asset disponibile (Binary/Digital chiuse).")
+                st.sidebar.error("Mercato chiuso o Errore API.")
 
 st.sidebar.divider()
 st.sidebar.subheader("🛡️ Kill-Switch")
@@ -542,7 +541,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                                            
                         if success:
                             st.success(f"✅ Ordine {mode} inviato! ID: {trade_id}")
-                            with st.spinner(f"⏳ Trade in corso su {asset}... Attendo 62s per l'esito."):
+                            with st.spinner(f"⏳ Trade in corso su {asset}... Esito in 62s."):
                                 time_lib.sleep(62) 
 
                             # Recupero esito
