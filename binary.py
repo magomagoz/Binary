@@ -232,7 +232,24 @@ def check_binary_signal(df):
             
     return None, stats, "TEST: RSI tra 45 e 55 (neutro)"
 
-# Funzione wrapper per gestire il timeout
+def smart_buy(API, stake, asset, action, duration):
+    """Esegue l'acquisto provando prima Digital e poi Binary."""
+    try:
+        # 1. Prova Digital (solitamente payout più alti)
+        check, id = API.buy_digital_spot(asset, stake, action, duration)
+        if check and isinstance(id, int): 
+            return True, id, "Digital"
+        
+        # 2. Prova Binary se Digital fallisce o non è disponibile
+        check, id = API.buy(stake, asset, action, duration)
+        if check: 
+            return True, id, "Binary"
+            
+    except Exception as e:
+        print(f"Errore interno API: {e}")
+    
+    return False, None, "Error/Closed"
+
 def buy_with_timeout(API, stake, asset, action, duration):
     result = [False, None, "Timeout"]
     
