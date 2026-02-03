@@ -68,12 +68,12 @@ if 'pnl_normal' not in st.session_state: st.session_state['pnl_normal'] = 0.0
 asset_map = {
     "EUR/USD": "EURUSD",
     "GBP/USD": "GBPUSD",
-    "EUR/JPY": "EURJPY",
+    #"EUR/JPY": "EURJPY",
     "USD/JPY": "USDJPY",
     "AUD/USD": "AUDUSD",
     "USD/CHF": "USDCHF",
-    "NZD/USD": "NZDUSD",
-    "EUR/GBP": "EURGBP",
+    #"NZD/USD": "NZDUSD",
+    #"EUR/GBP": "EURGBP",
     "USD/CAD": "USDCAD"
 }
 
@@ -166,7 +166,7 @@ def get_data_from_iq(API, asset):
 
 def get_iq_currency_strength(API):
     try:
-        pairs = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
+        pairs = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD"]
         weights = {}
         for pair in pairs:
             candles = API.get_candles(pair, 60, 60, time_lib.time())
@@ -357,7 +357,6 @@ else:
         st.session_state['trading_attivo'] = False
         st.rerun()
 
-
 st.sidebar.divider()
 st.sidebar.subheader("🌍 Sessioni di Mercato")
 
@@ -524,14 +523,14 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
             st.session_state['trading_attivo'] = False
             st.stop()
         
-        assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
+        assets_to_scan = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD"]
                        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 if not check_and_reconnect():
                     break
                 
-                time_lib.sleep(0.5) 
+                time_lib.sleep(1.5) 
                 df = get_data_from_iq(API, asset)
                 if df.empty: continue 
 
