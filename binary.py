@@ -52,7 +52,6 @@ st.title("🔌 IQ Option: Connectivity Test")
 # 1. LOGIN
 if st.session_state['iq_api'] is None:
     st.subheader("Login")
-    # Tenta di prendere le credenziali dai secrets, altrimenti campi vuoti
     try:
         email = st.text_input("Email", value=st.secrets["IQ_EMAIL"])
         pwd = st.text_input("Password", type="password", value=st.secrets["IQ_PASS"])
@@ -65,7 +64,7 @@ if st.session_state['iq_api'] is None:
             api = IQ_Option(email, pwd)
             check, reason = api.connect()
             if check:
-                api.change_balance("PRACTICE") # Forza conto Demo per sicurezza
+                api.change_balance("PRACTICE") 
                 st.session_state['iq_api'] = api
                 st.success("✅ Connesso!")
                 st.rerun()
@@ -76,7 +75,6 @@ else:
     # 2. PANNELLO DI CONTROLLO
     API = st.session_state['iq_api']
     
-    # Verifica stato connessione
     if not API.check_connect():
         st.warning("Riconnessione...")
         API.connect()
@@ -93,9 +91,9 @@ else:
     if st.button("🚀 LANCIA TEST TRADE (1€)", type="primary"):
         asset = "EURUSD"
         
-        # A. Ping Server (Sveglia connessione)
+        # A. Ping Server (CORRETTO: Usiamo get_balance che esiste sicuramente)
         with st.spinner("Ping al server..."):
-            API.get_server_time()
+            API.get_balance() # Questo comando sveglia la connessione senza dare errori
             time.sleep(0.5)
             
         # B. Invio Ordine
@@ -113,7 +111,7 @@ else:
             prog_bar = st.progress(0)
             status_text = st.empty()
             
-            for i in range(63): # 63 secondi per coprire latenza
+            for i in range(63): 
                 time.sleep(1)
                 prog_bar.progress((i+1)/63)
                 status_text.text(f"⏳ Attesa esito... {63-(i+1)}s")
