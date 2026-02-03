@@ -519,9 +519,7 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
-                # 1. Verifica connessione prima di ogni asset
                 if not check_and_reconnect():
-                    st.error("Connessione persa durante la scansione.")
                     break
                 
                 time_lib.sleep(0.5) 
@@ -533,33 +531,31 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                 if signal:
                     st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
                     
-                    # --- PROTEZIONE ANTI-BLOCCO (TIMEOUT 15s) ---
+                    # --- PROTEZIONE ANTI-BLOCCO ---
                     start_time = time_lib.time()
-                    success = False
-                    trade_id = None
-                    mode = ""
+                    success, trade_id, mode = False, None, ""
                     
                     try:
+                        # Lo spinner ora è limitato alla sola chiamata API
                         with st.spinner(f"Inviando ordine su {asset}..."):
                             success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
                         
-                        # Controllo se l'API ha impiegato troppo tempo
+                        # Se l'API impiega più di 15 secondi, forziamo l'uscita per sbloccare l'UI
                         if time_lib.time() - start_time > 15:
-                            st.warning(f"⚠️ Timeout API 15s su {asset}. Sblocco forzato.")
+                            st.warning(f"⚠️ Timeout API su {asset}. Interfaccia sbloccata.")
                             break
 
                         if success:
                             st.success(f"✅ Ordine {mode} aperto (ID: {trade_id})")
-                            with st.spinner(f"⏳ Trade in corso su {asset}... 62s"):
-                                time_lib.sleep(62) 
+                            time_lib.sleep(62) # Attesa scadenza candela
                             
                             # Recupero esito
                             res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
                             
-                            # --- LOGICA SESSIONI (POWER HOUR) ---
+                            # --- CALCOLO POWER HOUR (13:00-17:00 GMT) ---
                             now_gmt = datetime.now(pytz.utc)
                             is_ph = 13 <= now_gmt.hour < 17
-                            session_label = "🔥 Power Hour" if is_ph else "☕ Normal"
+                            session_type = "🔥 Power Hour" if is_ph else "☕ Normal"
                             
                             # Registrazione Trade
                             st.session_state['trades'].append({
@@ -568,18 +564,17 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                                 "Tipo": signal,
                                 "Esito": "WIN" if res > 0 else "LOSS", 
                                 "Profitto": res,
-                                "Sessione": session_label,
-                                "RSI": stats.get('RSI', 0), 
-                                "ADX": stats.get('ADX', 0)
+                                "Sessione": session_type
                             })
                             
-                            # Aggiornamento PnL
-                            if is_ph: st.session_state['pnl_power_hour'] += res
-                            else: st.session_state['pnl_normal'] += res
-                            st.session_state['daily_pnl'] += res
+                            # Aggiornamento PnL Differenziato
+                            if is_ph:
+                                st.session_state['pnl_power_hour'] += res
+                            else:
+                                st.session_state['pnl_normal'] += res
                             
-                            send_telegram_msg(f"📊 *TRADE CONCLUSO ({session_label})*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
-
+                            st.session_state['daily_pnl'] += res
+                            send_telegram_msg(f"📊 *TRADE CONCLUSO ({session_type})*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
                             # Controllo Kill-Switch WR (Minimo 10 trade)
                             df_temp = pd.DataFrame(st.session_state['trades'])
                             if len(df_temp) >= 10:
@@ -592,13 +587,13 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                             break # Esci dal ciclo asset dopo un trade eseguito
                             
                         else:
-                            st.warning(f"❌ {asset}: Rifiutato (Mercato chiuso o Payout basso).")
+                            st.warning(f"❌ {asset}: Ordine rifiutato dal broker.")
                             
                     except Exception as e:
-                        st.error(f"⚠️ Errore critico apertura: {e}")
+                        st.error(f"⚠️ Errore durante l'invio: {e}")
                         break
                 else:
-                    # Aggiornamento contatori scarti
+                    # Incremento scarti (quelli che vedi a 99 nella tua foto)
                     if "ADX" in reason: st.session_state['scarti_adx'] += 1
                     elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
                     st.write(f"❌ {asset}: {reason}")
