@@ -9,6 +9,7 @@ import pytz
 import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import threading
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Sentinel AI - Binary Bot", layout="wide")
@@ -230,21 +231,30 @@ def check_binary_signal(df):
         return "PUT", stats, "TEST: RSI SOPRA 55"
             
     return None, stats, "TEST: RSI tra 45 e 55 (neutro)"
+
+# Funzione wrapper per gestire il timeout
+def buy_with_timeout(API, stake, asset, action, duration):
+    result = [False, None, "Timeout"]
     
-def smart_buy(API, stake, asset, action, duration):
-    # Prova Digital prima, poi Binary, con gestione errori
-    try:
-        # Digital
-        check, id = API.buy_digital_spot(asset, stake, action, duration)
-        if check and isinstance(id, int): return True, id, "Digital"
+    def target():
+        result[0], result[1], result[2] = smart_buy(API, stake, asset, action, duration)
+    
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout=10) # Aspetta massimo 10 secondi
+    
+    if thread.is_alive():
+        return False, None, "API_LOCKED"
+    return result[0], result[1], result[2]
+
+# --- Nel ciclo di scansione principale ---
+if signal:
+    with st.spinner(f"📡 Test in corso su {asset}..."):
+        success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
         
-        # Binary
-        check, id = API.buy(stake, asset, action, duration)
-        if check: return True, id, "Binary"
-        
-    except Exception:
-        pass
-    return False, None, "Error/Closed"
+        if mode == "API_LOCKED":
+            st.error(f"⚠️ Il server IQ non risponde per {asset}. Passo al prossimo.")
+            continue # Non blocca l'app, passa oltre
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
