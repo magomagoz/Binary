@@ -209,36 +209,27 @@ def detect_divergence(df):
         return "N/A"
 
 def check_binary_signal(df):
-    if df.empty or len(df) < 60:
+    if df.empty or len(df) < 20:
         return None, {}, "Dati insufficienti"
 
-    # --- INDICATORI ---
-    # Bollinger più strette (std 2.0) e RSI più reattivo (30/70)
-    bb = ta.bbands(df['close'], length=20, std=2.0)
+    # --- INDICATORI TEST ---
+    # Usiamo parametri molto sensibili per forzare l'ingresso
     rsi = ta.rsi(df['close'], length=7).iloc[-1]
     adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
     adx = adx_df['ADX_14'].iloc[-1]
-    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
-    curr_k = stoch['STOCHk_14_3_3'].iloc[-1]
     
-    bbl = bb.iloc[-1, 0]
-    bbu = bb.iloc[-1, 2]
     curr_close = df['close'].iloc[-1]
-    
-    stats = {"Price": curr_close, "RSI": round(rsi, 2), "ADX": round(adx, 2), "Stoch": round(curr_k, 2)}
+    stats = {"Price": curr_close, "RSI": round(rsi, 2), "ADX": round(adx, 2)}
 
-    # --- LOGICA FILTRI ALLENTATA ---
-    # Accettiamo volatilità tra 12 e 45 (prima era 15-35)
-    if not (12 < adx < 45):
-        return None, stats, f"ADX non ideale ({stats['ADX']})"
-    
-    # Ingressi a 35/65 invece di 30/70
-    if curr_close <= bbl and rsi < 35 and curr_k < 25:
-        return "CALL", stats, "Segnale Validato"
-    elif curr_close >= bbu and rsi > 65 and curr_k > 75:
-        return "PUT", stats, "Segnale Validato"
+    # --- LOGICA TEST (MOLTO AGGRESSIVA) ---
+    # Se l'RSI è sopra 55 vendiamo, se sotto 45 compriamo (praticamente sempre attivo)
+    # Rimosso il filtro ADX e Bollinger per il test
+    if rsi < 45:
+        return "CALL", stats, "TEST: RSI SOTTO 45"
+    elif rsi > 55:
+        return "PUT", stats, "TEST: RSI SOPRA 55"
             
-    return None, stats, "Condizioni tecniche non soddisfatte"
+    return None, stats, "TEST: RSI tra 45 e 55 (neutro)"
     
 def smart_buy(API, stake, asset, action, duration):
     # Prova Digital prima, poi Binary, con gestione errori
