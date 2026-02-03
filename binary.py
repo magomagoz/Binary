@@ -254,7 +254,7 @@ if signal:
         
         if mode == "API_LOCKED":
             st.error(f"⚠️ Il server IQ non risponde per {asset}. Passo al prossimo.")
-continue # Non blocca l'app, passa oltre
+            continue # Non blocca l'app, passa oltre
 
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
