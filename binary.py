@@ -89,7 +89,7 @@ else:
     st.write("Premi il pulsante per lanciare un ordine di prova (CALL) su EURUSD.")
     
     if st.button("🚀 LANCIA TEST TRADE (1€)", type="primary"):
-        asset = "EURUSD"
+        asset = "BTCUSD"
         
         # A. Ping Server (CORRETTO: Usiamo get_balance che esiste sicuramente)
         with st.spinner("Ping al server..."):
