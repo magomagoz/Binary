@@ -541,8 +541,8 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
                     
                     # --- ESECUZIONE PROTETTA CON TIMEOUT ---
-                    # Usiamo buy_with_timeout per evitare il freeze dell'UI
-                    success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
+                    with st.spinner(f"📡 Inviando ordine su {asset}..."):
+                        success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
                     
                     if mode == "API_LOCKED":
                         st.error(f"⚠️ Il server IQ non risponde per {asset}. Sblocco UI forzato.")
@@ -551,8 +551,8 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                     if success:
                         st.success(f"✅ Ordine {mode} aperto (ID: {trade_id})")
                         
-                        # Countdown visivo senza bloccare tutto
-                        with st.spinner(f"⏳ Trade in corso su {asset}... 62s"):
+                        # Countdown visivo
+                        with st.spinner(f"⏳ Trade in corso su {asset}... Attesa 62s"):
                             time_lib.sleep(62) 
                         
                         # Recupero esito
@@ -594,11 +594,6 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
                         break 
                     else:
                         st.warning(f"❌ {asset}: Ordine rifiutato (Mercato chiuso o Payout basso).")
-                else:
-                    # Incremento contatori scarti
-                    if "ADX" in reason: st.session_state['scarti_adx'] += 1
-                    elif "TEST" in reason: st.session_state['scarti_rsi_stoch'] += 1
-                    st.write(f"❌ {asset}: {reason}")
 else:
     if not st.session_state['iq_api']:
         st.info("Effettua il login per attivare il sistema.")
