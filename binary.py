@@ -247,15 +247,6 @@ def buy_with_timeout(API, stake, asset, action, duration):
         return False, None, "API_LOCKED"
     return result[0], result[1], result[2]
 
-# --- Nel ciclo di scansione principale ---
-if signal:
-    with st.spinner(f"📡 Test in corso su {asset}..."):
-        success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
-        
-        if mode == "API_LOCKED":
-            st.error(f"⚠️ Il server IQ non risponde per {asset}. Passo al prossimo.")
-            continue # Non blocca l'app, passa oltre
-
 def send_daily_report():
     now = datetime.now(pytz.timezone('Europe/Rome'))
     # Invio alle 22:05
@@ -518,6 +509,11 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
                        
+
+
+        
+        
+        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 if not check_and_reconnect():
@@ -529,12 +525,21 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
 
                 signal, stats, reason = check_binary_signal(df)
             
+                # --- Nel ciclo di scansione principale ---
                 if signal:
-                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
+                    with st.spinner(f"📡 Test in corso su {asset}..."):
+                        success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
+                        
+                        if mode == "API_LOCKED":
+                            st.error(f"⚠️ Il server IQ non risponde per {asset}. Passo al prossimo.")
+                            continue # Non blocca l'app, passa oltre
+
+                #if signal:
+                    #st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
                     
                     # --- PROTEZIONE ANTI-BLOCCO ---
-                    start_time = time_lib.time()
-                    success, trade_id, mode = False, None, ""
+                    #start_time = time_lib.time()
+                    #success, trade_id, mode = False, None, ""
                     
                     try:
                         # Lo spinner ora è limitato alla sola chiamata API
