@@ -774,21 +774,19 @@ else:
     st.info("⏳ In attesa di dati per l'analisi")
 
 st.markdown("---")
-st.subheader("⚔️ Power Hour Challenge")
+st.subheader("⚔️ Analisi Sessioni: Power Hour vs Normal")
 col_ph, col_norm = st.columns(2)
 
 with col_ph:
-    st.markdown("### 🔥 Sessione Power")
-    st.metric("PnL Power Hour", f"€ {st.session_state['pnl_power_hour']:.2f}")
-    df_ph = pd.DataFrame([t for t in st.session_state['trades'] if t['Sessione'] == "🔥 Power Hour"])
+    st.metric("PnL Power Hour (13-17 GMT)", f"€ {st.session_state['pnl_power_hour']:.2f}")
+    df_ph = pd.DataFrame([t for t in st.session_state['trades'] if t.get('Sessione') == "🔥 Power Hour"])
     if not df_ph.empty:
         wr_ph = (len(df_ph[df_ph['Esito'] == 'WIN']) / len(df_ph)) * 100
         st.caption(f"Win Rate: {wr_ph:.1f}%")
 
 with col_norm:
-    st.markdown("### ☕ Ore Normali")
-    st.metric("PnL Normal Hours", f"€ {st.session_state['pnl_normal']:.2f}")
-    df_norm = pd.DataFrame([t for t in st.session_state['trades'] if t['Sessione'] == "☕ Normal"])
+    st.metric("PnL Altre Ore", f"€ {st.session_state['pnl_normal']:.2f}")
+    df_norm = pd.DataFrame([t for t in st.session_state['trades'] if t.get('Sessione') == "☕ Normal"])
     if not df_norm.empty:
         wr_norm = (len(df_norm[df_norm['Esito'] == 'WIN']) / len(df_norm)) * 100
         st.caption(f"Win Rate: {wr_norm:.1f}%")
