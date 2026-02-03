@@ -526,11 +526,6 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
         
         assets_to_scan = ["EURUSD", "GBPUSD", "EURJPY", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD", "EURGBP"]
                        
-
-
-        
-        
-        
         with st.status("🔍 Scansione Sentinel in corso...", expanded=True) as status:
             for asset in assets_to_scan:
                 if not check_and_reconnect():
@@ -542,83 +537,67 @@ if st.session_state['iq_api'] and st.session_state['trading_attivo']:
 
                 signal, stats, reason = check_binary_signal(df)
             
-                # --- Nel ciclo di scansione principale ---
                 if signal:
-                    with st.spinner(f"📡 Test in corso su {asset}..."):
-                        success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
-                        
-                        if mode == "API_LOCKED":
-                            st.error(f"⚠️ Il server IQ non risponde per {asset}. Passo al prossimo.")
-                            continue # Non blocca l'app, passa oltre
-
-                #if signal:
-                    #st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
+                    st.markdown(f"🚀 **{asset}**: Segnale {signal} trovato!")
                     
-                    # --- PROTEZIONE ANTI-BLOCCO ---
-                    #start_time = time_lib.time()
-                    #success, trade_id, mode = False, None, ""
+                    # --- ESECUZIONE PROTETTA CON TIMEOUT ---
+                    # Usiamo buy_with_timeout per evitare il freeze dell'UI
+                    success, trade_id, mode = buy_with_timeout(API, stake, asset, signal.lower(), 1)
                     
-                    try:
-                        # Lo spinner ora è limitato alla sola chiamata API
-                        with st.spinner(f"Inviando ordine su {asset}..."):
-                            success, trade_id, mode = smart_buy(API, stake, asset, signal.lower(), 1)
-                        
-                        # Se l'API impiega più di 15 secondi, forziamo l'uscita per sbloccare l'UI
-                        if time_lib.time() - start_time > 15:
-                            st.warning(f"⚠️ Timeout API su {asset}. Interfaccia sbloccata.")
-                            break
+                    if mode == "API_LOCKED":
+                        st.error(f"⚠️ Il server IQ non risponde per {asset}. Sblocco UI forzato.")
+                        continue 
 
-                        if success:
-                            st.success(f"✅ Ordine {mode} aperto (ID: {trade_id})")
-                            time_lib.sleep(62) # Attesa scadenza candela
-                            
-                            # Recupero esito
-                            res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
-                            
-                            # --- CALCOLO POWER HOUR (13:00-17:00 GMT) ---
-                            now_gmt = datetime.now(pytz.utc)
-                            is_ph = 13 <= now_gmt.hour < 17
-                            session_type = "🔥 Power Hour" if is_ph else "☕ Normal"
-                            
-                            # Registrazione Trade
-                            st.session_state['trades'].append({
-                                "Ora": get_now_rome().strftime("%H:%M"),
-                                "Asset": asset, 
-                                "Tipo": signal,
-                                "Esito": "WIN" if res > 0 else "LOSS", 
-                                "Profitto": res,
-                                "Sessione": session_type
-                            })
-                            
-                            # Aggiornamento PnL Differenziato
-                            if is_ph:
-                                st.session_state['pnl_power_hour'] += res
-                            else:
-                                st.session_state['pnl_normal'] += res
-                            
-                            st.session_state['daily_pnl'] += res
-                            send_telegram_msg(f"📊 *TRADE CONCLUSO ({session_type})*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
-                            # Controllo Kill-Switch WR (Minimo 10 trade)
-                            df_temp = pd.DataFrame(st.session_state['trades'])
-                            if len(df_temp) >= 10:
-                                wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
-                                current_wr = (wins_count / len(df_temp)) * 100
-                                if current_wr < 50:
-                                    send_telegram_msg(f"🛑 *KILL-SWITCH*: WR al {current_wr:.1f}%. Bot fermato per sicurezza.")
-                                    st.session_state['trading_attivo'] = False
-                                    st.rerun()
-                            break # Esci dal ciclo asset dopo un trade eseguito
-                            
-                        else:
-                            st.warning(f"❌ {asset}: Ordine rifiutato dal broker.")
-                            
-                    except Exception as e:
-                        st.error(f"⚠️ Errore durante l'invio: {e}")
-                        break
+                    if success:
+                        st.success(f"✅ Ordine {mode} aperto (ID: {trade_id})")
+                        
+                        # Countdown visivo senza bloccare tutto
+                        with st.spinner(f"⏳ Trade in corso su {asset}... 62s"):
+                            time_lib.sleep(62) 
+                        
+                        # Recupero esito
+                        res = API.check_win_v2(trade_id) if mode == "Binary" else API.get_digital_prox_result(trade_id)
+                        
+                        # --- LOGICA SESSIONI (POWER HOUR 13-17 GMT) ---
+                        now_gmt = datetime.now(pytz.utc)
+                        is_ph = 13 <= now_gmt.hour < 17
+                        session_label = "🔥 Power Hour" if is_ph else "☕ Normal"
+                        
+                        # Registrazione Trade
+                        st.session_state['trades'].append({
+                            "Ora": get_now_rome().strftime("%H:%M"),
+                            "Asset": asset, 
+                            "Tipo": signal,
+                            "Esito": "WIN" if res > 0 else "LOSS", 
+                            "Profitto": res,
+                            "Sessione": session_label,
+                            "RSI": stats.get('RSI', 0), 
+                            "ADX": stats.get('ADX', 0)
+                        })
+                        
+                        # Aggiornamento PnL
+                        if is_ph: st.session_state['pnl_power_hour'] += res
+                        else: st.session_state['pnl_normal'] += res
+                        st.session_state['daily_pnl'] += res
+                        
+                        send_telegram_msg(f"📊 *TRADE CONCLUSO ({session_label})*\nAsset: {asset}\nEsito: {'✅ WIN' if res > 0 else '❌ LOSS'}\nProfitto: €{res:.2f}")
+
+                        # Controllo Kill-Switch WR (Minimo 10 trade)
+                        df_temp = pd.DataFrame(st.session_state['trades'])
+                        if len(df_temp) >= 10:
+                            wins_count = len(df_temp[df_temp['Esito'] == 'WIN'])
+                            current_wr = (wins_count / len(df_temp)) * 100
+                            if current_wr < 50:
+                                send_telegram_msg(f"🛑 *KILL-SWITCH*: WR al {current_wr:.1f}%. Bot fermato.")
+                                st.session_state['trading_attivo'] = False
+                                st.rerun()
+                        break 
+                    else:
+                        st.warning(f"❌ {asset}: Ordine rifiutato (Mercato chiuso o Payout basso).")
                 else:
-                    # Incremento scarti (quelli che vedi a 99 nella tua foto)
+                    # Incremento contatori scarti
                     if "ADX" in reason: st.session_state['scarti_adx'] += 1
-                    elif "Condizioni tecniche" in reason: st.session_state['scarti_rsi_stoch'] += 1
+                    elif "TEST" in reason: st.session_state['scarti_rsi_stoch'] += 1
                     st.write(f"❌ {asset}: {reason}")
 else:
     if not st.session_state['iq_api']:
